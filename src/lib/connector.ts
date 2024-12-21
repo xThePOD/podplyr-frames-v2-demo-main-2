@@ -7,6 +7,7 @@ frameConnector.type = "frameConnector" as const;
 export function frameConnector() {
   let connected = false;
   let initialized = false;
+  let provider: any = null;
 
   const initialize = async () => {
     if (!initialized) {
@@ -17,10 +18,17 @@ export function frameConnector() {
         
         if (!fid) {
           console.log('No frame parameters found, might be first load');
+          // Don't throw here, just return and let the app handle the uninitialized state
           return;
         }
 
-        // Initialize the SDK with frame data
+        // Initialize the provider
+        provider = sdk.wallet.ethProvider;
+        
+        if (!provider) {
+          throw new Error("Failed to initialize provider");
+        }
+
         initialized = true;
       } catch (error) {
         console.error("Failed to initialize Frame SDK:", error);
@@ -35,18 +43,32 @@ export function frameConnector() {
     type: frameConnector.type,
 
     async setup() {
-      await initialize();
-      await this.connect({ chainId: config.chains[0].id });
+      try {
+        await initialize();
+        if (initialized) {
+          await this.connect({ chainId: config.chains[0].id });
+        }
+      } catch (error) {
+        console.error("Setup failed:", error);
+        // Don't throw here, let the app handle the uninitialized state
+      }
     },
 
     async connect({ chainId } = {}) {
-      await initialize();
-      
       try {
-        const provider = await this.getProvider();
+        await initialize();
+        
+        if (!initialized || !provider) {
+          throw new Error("Provider not initialized");
+        }
+
         const accounts = await provider.request({
           method: "eth_requestAccounts",
         });
+
+        if (!accounts || accounts.length === 0) {
+          throw new Error("No accounts returned");
+        }
 
         let currentChainId = await this.getChainId();
         if (chainId && currentChainId !== chainId) {
@@ -57,7 +79,7 @@ export function frameConnector() {
         connected = true;
 
         return {
-          accounts: accounts.map((x) => getAddress(x)),
+          accounts: accounts.map((x: string) => getAddress(x)),
           chainId: currentChainId,
         };
       } catch (error) {
@@ -69,19 +91,20 @@ export function frameConnector() {
 
     async disconnect() {
       connected = false;
+      provider = null;
+      initialized = false;
     },
 
     async getAccounts() {
-      if (!connected || !initialized) {
+      if (!connected || !initialized || !provider) {
         return [];
       }
 
       try {
-        const provider = await this.getProvider();
         const accounts = await provider.request({
           method: "eth_requestAccounts",
         });
-        return accounts.map((x) => getAddress(x));
+        return accounts.map((x: string) => getAddress(x));
       } catch (error) {
         console.error("Failed to get accounts:", error);
         return [];
@@ -89,12 +112,11 @@ export function frameConnector() {
     },
 
     async getChainId() {
-      if (!initialized) {
+      if (!initialized || !provider) {
         return config.chains[0].id;
       }
 
       try {
-        const provider = await this.getProvider();
         const hexChainId = await provider.request({ method: "eth_chainId" });
         return fromHex(hexChainId, "number");
       } catch (error) {
@@ -104,7 +126,7 @@ export function frameConnector() {
     },
 
     async isAuthorized() {
-      if (!connected || !initialized) {
+      if (!connected || !initialized || !provider) {
         return false;
       }
 
@@ -117,11 +139,10 @@ export function frameConnector() {
     },
 
     async switchChain({ chainId }) {
-      if (!initialized) {
-        throw new Error("SDK not initialized");
+      if (!initialized || !provider) {
+        throw new Error("Provider not initialized");
       }
 
-      const provider = await this.getProvider();
       const chain = config.chains.find((x) => x.id === chainId);
       if (!chain) throw new SwitchChainError(new ChainNotConfiguredError());
 
@@ -139,23 +160,25 @@ export function frameConnector() {
       }
     },
 
-    onAccountsChanged(accounts) {
+    onAccountsChanged(accounts: string[]) {
       if (accounts.length === 0) {
         this.onDisconnect();
       } else {
         config.emitter.emit("change", {
-          accounts: accounts.map((x) => getAddress(x)),
+          accounts: accounts.map((x: string) => getAddress(x)),
         });
       }
     },
 
-    onChainChanged(chain) {
+    onChainChanged(chain: string) {
       const chainId = Number(chain);
       config.emitter.emit("change", { chainId });
     },
 
     async onDisconnect() {
       connected = false;
+      provider = null;
+      initialized = false;
       config.emitter.emit("disconnect");
     },
 
@@ -163,7 +186,7 @@ export function frameConnector() {
       if (!initialized) {
         await initialize();
       }
-      return sdk.wallet.ethProvider;
+      return provider || sdk.wallet.ethProvider;
     },
   }));
 }
