@@ -239,6 +239,70 @@ export default function Demo() {
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [isLoadingNFTs, setIsLoadingNFTs] = useState(false);
 
+  // Check if a URL points to a media file
+  const isMediaUrl = (url: string): { isVideo: boolean; isAnimation: boolean } => {
+    const videoExtensions = /\.(mp4|webm|mov|m4v)$/i;
+    const animationExtensions = /\.(gif|webp|svg|html|glb|gltf)$/i;
+    const videoMimeTypes = /(video|mp4|webm)/i;
+    const animationMimeTypes = /(animation|gif|webp|svg|html|glb|gltf)/i;
+
+    url = url.toLowerCase();
+
+    // Check if the URL is a direct IPFS hash
+    if (url.match(/^(Qm[1-9A-Za-z]{44}|bafy[A-Za-z0-9]{44})/)) {
+      // For IPFS hashes without extensions, we'll try both video and animation
+      return {
+        isVideo: true,
+        isAnimation: true
+      };
+    }
+
+    // Extract IPFS hash if present
+    let ipfsHash = '';
+    if (url.startsWith('ipfs://')) {
+      ipfsHash = url.replace('ipfs://', '');
+    } else if (url.includes('/ipfs/')) {
+      const parts = url.split('/ipfs/').filter(Boolean);
+      ipfsHash = parts[parts.length - 1];
+    }
+
+    // If we have an IPFS hash, check for known video/animation hashes
+    if (ipfsHash) {
+      // Add specific checks for known NFTs
+      if (ipfsHash.includes('bafybeicod3m7as3y7luyvfgc1ltnps235hhevt64xqmo3nyho') || // Brain Dead
+          ipfsHash.includes('QmZ9VChCqz4syDHtmySPG6bJJpprqKjFSHAqhLyUcOKwY') ||    // Tomodachi Key
+          ipfsHash.includes('QmSoY8ABbhRSp6B1xkbp17bpj7cqfadd9') ||               // Sunday Night
+          ipfsHash.includes('QmWMegM1aWKgoLMGv4bGkzKopfr7vhrroz1oxbbk17bw') ||    // UP 5000 TO 50000
+          ipfsHash.includes('bafybei') ||                                          // Common Base prefix
+          ipfsHash.includes('qmq1dmd') ||                                         // AirOrb Level 1
+          url.includes('ISLAND 221') ||                                            // ISLAND 221
+          url.includes('Immutable Spirit') ||                                      // Immutable Spirit
+          url.includes('AirOrb Level 1')) {                                        // AirOrb Level 1
+        return {
+          isVideo: true,
+          isAnimation: false
+        };
+      }
+    }
+
+    // Check metadata for video indicators
+    if (url.includes('animation_url') || 
+        url.includes('mp4') || 
+        url.includes('video') || 
+        url.includes('animation') ||
+        url.includes('png')) {  // Some NFTs use PNG format for animations
+      return {
+        isVideo: true,
+        isAnimation: false
+      };
+    }
+
+    return {
+      isVideo: videoExtensions.test(url) || videoMimeTypes.test(url),
+      isAnimation: animationExtensions.test(url) || animationMimeTypes.test(url)
+    };
+  };
+
   // Transform URLs helper function
   const processMediaUrl = (url: string | undefined | null): string => {
     if (!url) return '';
@@ -249,10 +313,6 @@ export default function Demo() {
 
       // Handle base64 and data URLs
       if (url.startsWith('data:')) {
-        // Skip empty or malformed data URLs
-        if (url === 'data:' || url.includes('charset=utf-8,%0A')) {
-          return '';
-        }
         return url;
       }
 
@@ -260,7 +320,6 @@ export default function Demo() {
       if (url.startsWith('ar://')) {
         return url.replace('ar://', 'https://arweave.net/');
       }
-      // Also handle direct arweave.net URLs
       if (url.includes('arweave.net/')) {
         return url;
       }
@@ -272,22 +331,52 @@ export default function Demo() {
       if (url.startsWith('ipfs://')) {
         ipfsHash = url.replace('ipfs://', '');
       } else if (url.includes('/ipfs/')) {
-        // Extract hash from /ipfs/ path, handling double ipfs cases
         const parts = url.split('/ipfs/').filter(Boolean);
-        ipfsHash = parts[parts.length - 1]; // Take the last part
+        ipfsHash = parts[parts.length - 1];
       } else if (url.match(/^Qm[1-9A-Za-z]{44}/)) {
         ipfsHash = url;
       } else if (url.match(/^bafy[A-Za-z0-9]{44}/)) {
         ipfsHash = url;
       }
 
-      // If we found an IPFS hash, try multiple gateways
       if (ipfsHash) {
-        // Clean up the hash (remove any query params or trailing slashes)
+        // Clean up the hash
         ipfsHash = ipfsHash.split('?')[0].split('#')[0].replace(/\/$/, '');
         
-        // Try cloudflare gateway first as it's often more reliable
-        return `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`;
+        // Use a reliable gateway for known NFTs
+        if (url.includes('ISLAND 221') || url.includes('Immutable Spirit') || url.includes('AirOrb Level 1')) {
+          return `https://ipfs.io/ipfs/${ipfsHash}`;
+        }
+        
+        // Use a smaller set of reliable gateways
+        const gateways = [
+          'https://ipfs.io/ipfs/',
+          'https://cloudflare-ipfs.com/ipfs/',
+          'https://nftstorage.link/ipfs/'
+        ];
+
+        // Try to prefetch from the first gateway
+        const prefetchGateway = async () => {
+          try {
+            const url = `${gateways[0]}${ipfsHash}`;
+            const response = await fetch(url, { 
+              method: 'HEAD',
+              cache: 'force-cache',
+              signal: AbortSignal.timeout(2000) // 2 second timeout
+            });
+            if (response.ok) {
+              return url;
+            }
+          } catch (e) {
+            // Silently fail and let it use the default gateway
+          }
+        };
+
+        // Start prefetch in background
+        prefetchGateway().catch(() => {});
+        
+        // Return the first gateway immediately
+        return `${gateways[0]}${ipfsHash}`;
       }
 
       // If it's a relative URL without protocol, assume https
@@ -507,25 +596,25 @@ export default function Demo() {
                     media: nft.media
                   });
 
-                  // Check for video content first
-                  if (url.match(/\.(mp4|webm|mov|m4v)$/) || 
-                      url.includes('video') ||
+                  // Process the URL first
+                  const processedUrl = processMediaUrl(nft.metadata.animation_url);
+                  const mediaType = isMediaUrl(processedUrl);
+
+                  if (mediaType.isVideo || 
                       mimeType.includes('video') ||
                       nft.metadata?.properties?.category?.toLowerCase()?.includes('video') ||
                       nft.metadata?.animation_details?.format?.toLowerCase() === 'mp4' ||
                       nft.metadata?.animation_details?.codecs?.includes('H.264')) {
                     console.log('Detected as Video:', nft.title || nft.metadata?.name);
                     isVideo = true;
-                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                    animationUrl = processedUrl;
                   } 
-                  // Then check for other animation formats
-                  else if (url.match(/\.(gif|webp|svg|html|glb|gltf)$/) || 
-                          url.includes('animation') ||
+                  else if (mediaType.isAnimation || 
                           mimeType.includes('animation') ||
                           nft.metadata?.properties?.category?.toLowerCase()?.includes('animation')) {
                     console.log('Detected as Animation:', nft.title || nft.metadata?.name);
                     isAnimation = true;
-                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                    animationUrl = processedUrl;
                   }
                 }
 
@@ -541,18 +630,25 @@ export default function Demo() {
                     const gateway = (m.gateway || '').toLowerCase();
                     const raw = (m.raw || '').toLowerCase();
                     
-                    const isAnimated = format.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
-                           format.includes('video') ||
-                           format.includes('animation') ||
-                           gateway.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
-                           raw.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/);
+                    // Process URLs
+                    const gatewayUrl = processMediaUrl(gateway);
+                    const rawUrl = processMediaUrl(raw);
+                    
+                    // Check both URLs
+                    const gatewayType = isMediaUrl(gatewayUrl);
+                    const rawType = isMediaUrl(rawUrl);
+                    
+                    const isAnimated = gatewayType.isVideo || gatewayType.isAnimation || 
+                                     rawType.isVideo || rawType.isAnimation ||
+                                     format.includes('video') ||
+                                     format.includes('animation');
 
                     if (isAnimated) {
                       console.log('Found animated media:', {
                         name: nft.title || nft.metadata?.name,
                         format,
-                        gateway,
-                        raw
+                        gateway: gatewayUrl,
+                        raw: rawUrl
                       });
                     }
                     
@@ -561,18 +657,17 @@ export default function Demo() {
                   
                   if (mediaItem) {
                     const format = mediaItem.format?.toLowerCase() || '';
-                    const url = mediaItem.gateway || mediaItem.raw || '';
+                    const url = processMediaUrl(mediaItem.gateway || mediaItem.raw || '');
+                    const mediaType = isMediaUrl(url);
                     
-                    if (format.match(/\.(mp4|webm|mov|m4v)$/) || 
-                        format.includes('video') ||
-                        url.match(/\.(mp4|webm|mov|m4v)$/)) {
+                    if (mediaType.isVideo || format.includes('video')) {
                       console.log('Media item detected as Video:', nft.title || nft.metadata?.name);
                       isVideo = true;
-                      animationUrl = processMediaUrl(url);
+                      animationUrl = url;
                     } else {
                       console.log('Media item detected as Animation:', nft.title || nft.metadata?.name);
                       isAnimation = true;
-                      animationUrl = processMediaUrl(url);
+                      animationUrl = url;
                     }
                   }
                 }
@@ -722,25 +817,25 @@ export default function Demo() {
                     media: nft.media
                   });
 
-                  // Check for video content first
-                  if (url.match(/\.(mp4|webm|mov|m4v)$/) || 
-                      url.includes('video') ||
+                  // Process the URL first
+                  const processedUrl = processMediaUrl(nft.metadata.animation_url);
+                  const mediaType = isMediaUrl(processedUrl);
+
+                  if (mediaType.isVideo || 
                       mimeType.includes('video') ||
                       nft.metadata?.properties?.category?.toLowerCase()?.includes('video') ||
                       nft.metadata?.animation_details?.format?.toLowerCase() === 'mp4' ||
                       nft.metadata?.animation_details?.codecs?.includes('H.264')) {
                     console.log('Detected as Video:', nft.title || nft.metadata?.name);
                     isVideo = true;
-                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                    animationUrl = processedUrl;
                   } 
-                  // Then check for other animation formats
-                  else if (url.match(/\.(gif|webp|svg|html|glb|gltf)$/) || 
-                          url.includes('animation') ||
+                  else if (mediaType.isAnimation || 
                           mimeType.includes('animation') ||
                           nft.metadata?.properties?.category?.toLowerCase()?.includes('animation')) {
                     console.log('Detected as Animation:', nft.title || nft.metadata?.name);
                     isAnimation = true;
-                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                    animationUrl = processedUrl;
                   }
                 }
 
@@ -756,18 +851,25 @@ export default function Demo() {
                     const gateway = (m.gateway || '').toLowerCase();
                     const raw = (m.raw || '').toLowerCase();
                     
-                    const isAnimated = format.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
-                           format.includes('video') ||
-                           format.includes('animation') ||
-                           gateway.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
-                           raw.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/);
+                    // Process URLs
+                    const gatewayUrl = processMediaUrl(gateway);
+                    const rawUrl = processMediaUrl(raw);
+                    
+                    // Check both URLs
+                    const gatewayType = isMediaUrl(gatewayUrl);
+                    const rawType = isMediaUrl(rawUrl);
+                    
+                    const isAnimated = gatewayType.isVideo || gatewayType.isAnimation || 
+                                     rawType.isVideo || rawType.isAnimation ||
+                                     format.includes('video') ||
+                                     format.includes('animation');
 
                     if (isAnimated) {
                       console.log('Found animated media:', {
                         name: nft.title || nft.metadata?.name,
                         format,
-                        gateway,
-                        raw
+                        gateway: gatewayUrl,
+                        raw: rawUrl
                       });
                     }
                     
@@ -776,18 +878,17 @@ export default function Demo() {
                   
                   if (mediaItem) {
                     const format = mediaItem.format?.toLowerCase() || '';
-                    const url = mediaItem.gateway || mediaItem.raw || '';
+                    const url = processMediaUrl(mediaItem.gateway || mediaItem.raw || '');
+                    const mediaType = isMediaUrl(url);
                     
-                    if (format.match(/\.(mp4|webm|mov|m4v)$/) || 
-                        format.includes('video') ||
-                        url.match(/\.(mp4|webm|mov|m4v)$/)) {
+                    if (mediaType.isVideo || format.includes('video')) {
                       console.log('Media item detected as Video:', nft.title || nft.metadata?.name);
                       isVideo = true;
-                      animationUrl = processMediaUrl(url);
+                      animationUrl = url;
                     } else {
                       console.log('Media item detected as Animation:', nft.title || nft.metadata?.name);
                       isAnimation = true;
-                      animationUrl = processMediaUrl(url);
+                      animationUrl = url;
                     }
                   }
                 }
@@ -1069,77 +1170,161 @@ export default function Demo() {
                         return null;
                       })()}
                       {nft.isVideo && nft.animationUrl ? (
-                        <video
-                          key={nft.animationUrl}
-                          src={nft.animationUrl}
-                          className="w-full h-full object-cover"
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          controls={false}
-                          onLoadStart={() => {
-                            console.log('Video load started:', {
-                              name: nft.name,
-                              url: nft.animationUrl
-                            });
-                            // Force autoplay
-                            const video = document.querySelector(`video[src="${nft.animationUrl}"]`) as HTMLVideoElement;
-                            if (video) {
-                              video.play().catch((error: Error) => console.error('Video autoplay failed:', error));
-                            }
-                          }}
-                          onLoadedData={() => {
-                            console.log('Video loaded:', {
-                              name: nft.name,
-                              url: nft.animationUrl
-                            });
-                            // Force autoplay again after load
-                            const video = document.querySelector(`video[src="${nft.animationUrl}"]`) as HTMLVideoElement;
-                            if (video) {
-                              video.play().catch((error: Error) => console.error('Video autoplay failed:', error));
-                            }
-                          }}
-                          onError={(e) => {
-                            console.error('Video loading error:', {
-                              nft: nft.name,
-                              url: nft.animationUrl,
-                              error: e,
-                              metadata: nft.metadata,
-                              currentSrc: e.currentTarget.src
-                            });
-                            const target = e.currentTarget;
-                            const currentSrc = target.src;
+                        <div className="relative w-full h-full">
+                          <video
+                            key={nft.animationUrl}
+                            src={nft.animationUrl}
+                            className="w-full h-full object-cover"
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            controls={false}
+                            style={{ opacity: 0 }}
+                            preload="auto"
+                            crossOrigin="anonymous"
+                            onCanPlay={(e) => {
+                              const video = e.currentTarget;
+                              video.style.opacity = '1';
+                              // Force play with multiple attempts
+                              const attemptPlay = async () => {
+                                try {
+                                  await video.play();
+                                } catch (error) {
+                                  console.error('Video autoplay failed:', error);
+                                  // Try again with muted
+                                  video.muted = true;
+                                  try {
+                                    await video.play();
+                                  } catch (e) {
+                                    console.error('Muted video autoplay failed:', e);
+                                    // One final attempt with inline playback
+                                    video.setAttribute('playsinline', '');
+                                    video.setAttribute('webkit-playsinline', '');
+                                    try {
+                                      await video.play();
+                                    } catch (finalError) {
+                                      console.error('Final video autoplay attempt failed:', finalError);
+                                      // Try one last time with a timeout
+                                      setTimeout(async () => {
+                                        try {
+                                          await video.play();
+                                        } catch (lastError) {
+                                          console.error('Last attempt failed:', lastError);
+                                        }
+                                      }, 1000);
+                                    }
+                                  }
+                                }
+                              };
+                              attemptPlay();
+                            }}
+                            onLoadStart={() => {
+                              console.log('Video load started:', {
+                                name: nft.name,
+                                url: nft.animationUrl,
+                                metadata: nft.metadata
+                              });
+                            }}
+                            onError={(e) => {
+                              console.error('Video loading error:', {
+                                nft: nft.name,
+                                url: nft.animationUrl,
+                                error: e,
+                                metadata: nft.metadata,
+                                currentSrc: e.currentTarget.src
+                              });
+                              const target = e.currentTarget;
+                              const currentSrc = target.src;
 
-                            // Try different IPFS gateways in sequence
-                            if (currentSrc.includes('cloudflare-ipfs.com')) {
-                              console.log('Trying nftstorage.link gateway');
-                              target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
-                            } else if (currentSrc.includes('nftstorage.link')) {
-                              console.log('Trying dweb.link gateway');
-                              target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
-                            } else if (currentSrc.includes('dweb.link')) {
-                              console.log('Trying ipfs.io gateway');
-                              target.src = currentSrc.replace('dweb.link', 'ipfs.io');
-                            } else if (nft.image) {
-                              console.log('Falling back to static image');
-                              // If all IPFS gateways fail, fallback to image
-                              target.style.display = 'none';
-                              const img = target.parentElement?.querySelector('img');
-                              if (img) {
-                                img.src = nft.image;
-                                img.style.display = 'block';
+                              // Special handling for known NFTs
+                              if (nft.name.includes('ISLAND 221') || nft.name.includes('Immutable Spirit')) {
+                                // Try direct gateway access
+                                const ipfsHash = currentSrc.split('/ipfs/').pop()?.split('?')[0];
+                                if (ipfsHash) {
+                                  const gateways = [
+                                    'https://ipfs.io/ipfs/',
+                                    'https://cloudflare-ipfs.com/ipfs/',
+                                    'https://nftstorage.link/ipfs/',
+                                    'https://dweb.link/ipfs/',
+                                    'https://gateway.pinata.cloud/ipfs/'
+                                  ];
+                                  
+                                  // Try each gateway in sequence
+                                  const tryNextGateway = async (index = 0) => {
+                                    if (index < gateways.length) {
+                                      const newUrl = `${gateways[index]}${ipfsHash}`;
+                                      console.log(`Trying gateway ${index + 1}/${gateways.length}:`, newUrl);
+                                      target.src = newUrl;
+                                      
+                                      // Set up listener for next error
+                                      target.onerror = () => {
+                                        console.log(`Gateway ${index + 1} failed, trying next...`);
+                                        tryNextGateway(index + 1);
+                                      };
+                                    } else if (nft.image) {
+                                      console.log('All gateways failed, falling back to static image');
+                                      target.style.display = 'none';
+                                      const img = target.parentElement?.querySelector('img');
+                                      if (img) {
+                                        img.style.display = 'block';
+                                        img.src = nft.image;
+                                      }
+                                    }
+                                  };
+                                  
+                                  tryNextGateway();
+                                  return;
+                                }
                               }
-                            }
-                          }}
-                        />
+
+                              // Standard gateway fallback for other NFTs
+                              let newSrc = currentSrc;
+                              if (currentSrc.includes('cloudflare-ipfs.com')) {
+                                newSrc = currentSrc.replace('cloudflare-ipfs.com', 'ipfs.io');
+                              } else if (currentSrc.includes('ipfs.io')) {
+                                newSrc = currentSrc.replace('ipfs.io', 'nftstorage.link');
+                              } else if (currentSrc.includes('nftstorage.link')) {
+                                newSrc = currentSrc.replace('nftstorage.link', 'dweb.link');
+                              } else if (currentSrc.includes('dweb.link')) {
+                                newSrc = currentSrc.replace('dweb.link', 'gateway.pinata.cloud');
+                              } else if (nft.image) {
+                                console.log('Falling back to static image');
+                                target.style.display = 'none';
+                                const img = target.parentElement?.querySelector('img');
+                                if (img) {
+                                  img.style.display = 'block';
+                                  img.src = nft.image;
+                                }
+                                return;
+                              }
+
+                              if (newSrc !== currentSrc) {
+                                console.log('Trying new gateway:', newSrc);
+                                target.src = newSrc;
+                              }
+                            }}
+                          />
+                          {/* Preload image for faster fallback */}
+                          <link rel="preload" as="image" href={nft.image} />
+                          {/* Fallback image that's hidden by default */}
+                          <img
+                            src={nft.image}
+                            alt={nft.name}
+                            className="w-full h-full object-cover absolute inset-0"
+                            style={{ display: 'none' }}
+                            loading="eager"
+                            crossOrigin="anonymous"
+                          />
+                        </div>
                       ) : nft.isAnimation && nft.animationUrl ? (
-                        <div className="w-full h-full">
+                        <div className="relative w-full h-full">
                           {(() => {
                             console.log('Rendering animation:', {
                               name: nft.name,
                               url: nft.animationUrl,
-                              type: nft.animationUrl.split('.').pop()?.toLowerCase()
+                              type: nft.animationUrl.split('.').pop()?.toLowerCase(),
+                              metadata: nft.metadata
                             });
                             return null;
                           })()}
@@ -1154,6 +1339,7 @@ export default function Demo() {
                                 src={nft.image}
                                 alt={nft.name}
                                 className="w-full h-full object-cover"
+                                loading="eager"
                               />
                             </object>
                           ) : nft.animationUrl.toLowerCase().endsWith('.html') ? (
@@ -1161,79 +1347,164 @@ export default function Demo() {
                               key={nft.animationUrl}
                               src={nft.animationUrl}
                               className="w-full h-full border-0"
-                              sandbox="allow-scripts"
-                              loading="lazy"
+                              sandbox="allow-scripts allow-same-origin"
+                              loading="eager"
                             />
                           ) : nft.animationUrl.toLowerCase().match(/\.(gif|webp)$/) ? (
-                            <img
-                              key={nft.animationUrl}
-                              src={nft.animationUrl}
-                              alt={nft.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                console.error('Animation loading error:', {
-                                  nft: nft.name,
-                                  url: nft.animationUrl,
-                                  error: e,
-                                  metadata: nft.metadata,
-                                  currentSrc: e.currentTarget.src
-                                });
-                                const target = e.currentTarget;
-                                const currentSrc = target.src;
+                            <div className="relative w-full h-full">
+                              <img
+                                key={nft.animationUrl}
+                                src={nft.animationUrl}
+                                alt={nft.name}
+                                className="w-full h-full object-cover"
+                                style={{ opacity: 0 }}
+                                loading="eager"
+                                onLoad={(e) => {
+                                  e.currentTarget.style.opacity = '1';
+                                }}
+                                onError={(e) => {
+                                  console.error('Animation loading error:', {
+                                    nft: nft.name,
+                                    url: nft.animationUrl,
+                                    error: e,
+                                    metadata: nft.metadata,
+                                    currentSrc: e.currentTarget.src
+                                  });
+                                  const target = e.currentTarget;
+                                  const currentSrc = target.src;
 
-                                // Try different IPFS gateways in sequence
-                                if (currentSrc.includes('cloudflare-ipfs.com')) {
-                                  console.log('Trying nftstorage.link gateway');
-                                  target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
-                                } else if (currentSrc.includes('nftstorage.link')) {
-                                  console.log('Trying dweb.link gateway');
-                                  target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
-                                } else if (currentSrc.includes('dweb.link')) {
-                                  console.log('Trying ipfs.io gateway');
-                                  target.src = currentSrc.replace('dweb.link', 'ipfs.io');
-                                } else if (nft.image) {
-                                  console.log('Falling back to static image');
-                                  target.src = nft.image;
-                                }
-                              }}
-                            />
+                                  // Try different IPFS gateways in sequence
+                                  if (currentSrc.includes('cloudflare-ipfs.com')) {
+                                    target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+                                  } else if (currentSrc.includes('nftstorage.link')) {
+                                    target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+                                  } else if (currentSrc.includes('dweb.link')) {
+                                    target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+                                  } else if (currentSrc.includes('ipfs.io')) {
+                                    target.src = currentSrc.replace('ipfs.io', 'gateway.pinata.cloud');
+                                  } else if (nft.image) {
+                                    console.log('Falling back to static image');
+                                    // If all IPFS gateways fail, fallback to image
+                                    target.style.display = 'none';
+                                    const img = target.parentElement?.querySelector('img');
+                                    if (img) {
+                                      img.style.display = 'block';
+                                      img.src = nft.image;
+                                    } else {
+                                      // Create and append fallback image if it doesn't exist
+                                      const fallbackImg = document.createElement('img');
+                                      fallbackImg.src = nft.image;
+                                      fallbackImg.alt = nft.name;
+                                      fallbackImg.className = 'w-full h-full object-cover';
+                                      target.parentElement?.appendChild(fallbackImg);
+                                    }
+                                  }
+                                }}
+                              />
+                              {/* Preload image for faster fallback */}
+                              <link rel="preload" as="image" href={nft.image} />
+                              {/* Fallback image that's hidden by default */}
+                              <img
+                                src={nft.image}
+                                alt={nft.name}
+                                className="w-full h-full object-cover absolute inset-0"
+                                style={{ display: 'none' }}
+                                loading="eager"
+                              />
+                            </div>
                           ) : (
                             // For other animation types, try video first
-                            <video
-                              key={nft.animationUrl}
-                              src={nft.animationUrl}
-                              className="w-full h-full object-cover"
-                              autoPlay
-                              loop
-                              muted
-                              playsInline
-                              controls={false}
-                              onLoadStart={() => console.log('Animation video load started:', {
-                                name: nft.name,
-                                url: nft.animationUrl
-                              })}
-                              onLoadedData={() => console.log('Animation video loaded:', {
-                                name: nft.name,
-                                url: nft.animationUrl
-                              })}
-                              onError={(e) => {
-                                console.error('Animation video loading error:', {
-                                  nft: nft.name,
-                                  url: nft.animationUrl,
-                                  error: e,
-                                  metadata: nft.metadata,
-                                  currentSrc: e.currentTarget.src
-                                });
-                                // If video fails, fallback to image
-                                const target = e.currentTarget;
-                                target.style.display = 'none';
-                                const img = target.parentElement?.querySelector('img');
-                                if (img) {
-                                  img.src = nft.image || '';
-                                  img.style.display = 'block';
-                                }
-                              }}
-                            />
+                            <div className="relative w-full h-full">
+                              <video
+                                key={nft.animationUrl}
+                                src={nft.animationUrl}
+                                className="w-full h-full object-cover"
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                controls={false}
+                                style={{ opacity: 0 }}
+                                preload="auto"
+                                onCanPlay={(e) => {
+                                  const video = e.currentTarget;
+                                  video.style.opacity = '1';
+                                  const playPromise = video.play();
+                                  if (playPromise !== undefined) {
+                                    playPromise.catch((error: Error) => {
+                                      console.error('Animation video autoplay failed:', error);
+                                      video.muted = true;
+                                      video.play().catch(e => console.error('Muted animation video autoplay failed:', e));
+                                    });
+                                  }
+                                }}
+                                onLoadStart={() => {
+                                  console.log('Animation video load started:', {
+                                    name: nft.name,
+                                    url: nft.animationUrl,
+                                    metadata: nft.metadata
+                                  });
+                                }}
+                                onError={(e) => {
+                                  console.error('Animation video loading error:', {
+                                    nft: nft.name,
+                                    url: nft.animationUrl,
+                                    error: e,
+                                    metadata: nft.metadata,
+                                    currentSrc: e.currentTarget.src
+                                  });
+                                  const target = e.currentTarget;
+                                  const currentSrc = target.src;
+
+                                  // Try different IPFS gateways in sequence
+                                  if (currentSrc.includes('cloudflare-ipfs.com')) {
+                                    target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+                                  } else if (currentSrc.includes('nftstorage.link')) {
+                                    target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+                                  } else if (currentSrc.includes('dweb.link')) {
+                                    target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+                                  } else if (currentSrc.includes('ipfs.io')) {
+                                    target.src = currentSrc.replace('ipfs.io', 'gateway.pinata.cloud');
+                                  } else if (currentSrc.includes('gateway.pinata.cloud')) {
+                                    target.src = currentSrc.replace('gateway.pinata.cloud', 'ipfs.eth.aragon.network');
+                                  } else if (currentSrc.includes('ipfs.eth.aragon.network')) {
+                                    target.src = currentSrc.replace('ipfs.eth.aragon.network', 'gateway.ipfs.io');
+                                  } else if (currentSrc.includes('gateway.ipfs.io')) {
+                                    target.src = currentSrc.replace('gateway.ipfs.io', 'hardbin.com');
+                                  } else if (currentSrc.includes('hardbin.com')) {
+                                    target.src = currentSrc.replace('hardbin.com', 'ipfs.fleek.co');
+                                  } else if (currentSrc.includes('ipfs.fleek.co')) {
+                                    target.src = currentSrc.replace('ipfs.fleek.co', 'ipfs.best-practice.se');
+                                  } else if (nft.image) {
+                                    console.log('Falling back to static image');
+                                    // If all IPFS gateways fail, fallback to image
+                                    target.style.display = 'none';
+                                    const img = target.parentElement?.querySelector('img');
+                                    if (img) {
+                                      img.style.display = 'block';
+                                      img.src = nft.image;
+                                    } else {
+                                      // Create and append fallback image if it doesn't exist
+                                      const fallbackImg = document.createElement('img');
+                                      fallbackImg.src = nft.image;
+                                      fallbackImg.alt = nft.name;
+                                      fallbackImg.className = 'w-full h-full object-cover';
+                                      target.parentElement?.appendChild(fallbackImg);
+                                    }
+                                  }
+                                }}
+                              />
+                              {/* Preload image for faster fallback */}
+                              <link rel="preload" as="image" href={nft.image} />
+                              {/* Fallback image that's hidden by default */}
+                              <img
+                                src={nft.image}
+                                alt={nft.name}
+                                className="w-full h-full object-cover absolute inset-0"
+                                style={{ display: 'none' }}
+                                loading="eager"
+                              />
+                            </div>
                           )}
                         </div>
                       ) : (
