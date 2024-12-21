@@ -64,6 +64,104 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   );
 }
 
+function isNFTArtwork(artwork: string | NFTArtwork): artwork is NFTArtwork {
+  return typeof artwork === 'object' && artwork !== null && ('uri' in artwork || 'url' in artwork);
+}
+
+interface NFTArtwork {
+  uri?: string;
+  url?: string;
+  mimeType?: string;
+}
+
+type NFTArtworkType = string | NFTArtwork;
+
+interface ArtworkObject {
+  uri?: string;
+  url?: string;
+  mimeType?: string;
+}
+
+function isArtworkObject(artwork: unknown): artwork is ArtworkObject {
+  if (typeof artwork !== 'object' || artwork === null) return false;
+  const obj = artwork as { [key: string]: unknown };
+  return (
+    ('uri' in obj && (typeof obj['uri'] === 'string' || obj['uri'] === undefined)) ||
+    ('url' in obj && (typeof obj['url'] === 'string' || obj['url'] === undefined))
+  );
+}
+
+function getArtworkUrl(artwork: unknown): string | null {
+  if (typeof artwork === 'string') {
+    return artwork;
+  }
+  if (isArtworkObject(artwork)) {
+    const obj = artwork as { [key: string]: string | undefined };
+    const uri = 'uri' in obj ? obj['uri'] : undefined;
+    const url = 'url' in obj ? obj['url'] : undefined;
+    return uri || url || null;
+  }
+  return null;
+}
+
+interface NFTMetadata {
+    name?: string;
+    image?: string;
+    image_url?: string;
+    animation_url?: string;
+    audio?: string;
+    audio_url?: string;
+    mimeType?: string;
+    mime_type?: string;
+    artwork?: unknown;
+    content?: {
+      mime?: string;
+    };
+    animation_details?: {
+      format?: string;
+      codecs?: string[];
+      bytes?: number;
+      duration?: number;
+      width?: number;
+      height?: number;
+    };
+    properties?: {
+      image?: string;
+      audio?: string;
+      audio_url?: string;
+      audio_file?: string;
+      audio_mime_type?: string;
+      animation_url?: string;
+      video?: string;
+      mimeType?: string;
+      files?: NFTFile[] | NFTFile;
+      category?: string;
+      sound?: boolean;
+      visual?: {
+        url?: string;
+      };
+      soundContent?: {
+        url?: string;
+        mimeType?: string;
+      };
+    };
+}
+
+interface NFTFile {
+  uri?: string;
+  url?: string;
+  type?: string;
+  mimeType?: string;
+  name?: string;
+}
+
+interface NFTMedia {
+  gateway?: string;
+  raw?: string;
+  format?: string;
+  bytes?: number;
+}
+
 interface NFT {
   contract: string;
   tokenId: string;
@@ -75,50 +173,13 @@ interface NFT {
   isVideo: boolean;
   isAnimation: boolean;
   animationUrl?: string;
-  metadata?: {
-    name?: string;
-    image?: string;
-    image_url?: string;
-    animation_url?: string;
-    audio?: string;
-    audio_url?: string;
-    mimeType?: string;
-    mime_type?: string;
-    artwork?: {
-      uri?: string;
-    };
-    properties?: {
-      image?: string;
-      audio?: string;
-      audio_url?: string;
-      audio_file?: string;
-      animation_url?: string;
-      category?: string;
-      sound?: boolean;
-      visual?: {
-        url?: string;
-      };
-      soundContent?: {
-        url?: string;
-        mimeType?: string;
-      };
-      mimeType?: string;
-      audio_mime_type?: string;
-    };
-  };
+  hasValidAudio: boolean;
+  metadata?: NFTMetadata;
   collection?: {
     name: string;
     image?: string;
   };
   network: string;
-}
-
-interface NFTFile {
-  type?: string;
-  mimeType?: string;
-  uri?: string;
-  url?: string;
-  name?: string;
 }
 
 interface AlchemyNFT {
@@ -132,41 +193,8 @@ interface AlchemyNFT {
   tokenId: string;
   title?: string;
   description?: string;
-  metadata?: {
-    name?: string;
-    image?: string;
-    image_url?: string;
-    animation_url?: string;
-    audio?: string;
-    audio_url?: string;
-    mimeType?: string;
-    mime_type?: string;
-    artwork?: {
-      uri?: string;
-    };
-    properties?: {
-      image?: string;
-      audio?: string;
-      audio_url?: string;
-      audio_file?: string;
-      animation_url?: string;
-      category?: string;
-      sound?: boolean;
-      visual?: {
-        url?: string;
-      };
-      soundContent?: {
-        url?: string;
-        mimeType?: string;
-      };
-      mimeType?: string;
-      audio_mime_type?: string;
-      files?: NFTFile[] | NFTFile;
-    };
-  };
-  media?: Array<{
-    gateway?: string;
-  }>;
+  metadata?: NFTMetadata;
+  media?: NFTMedia[];
 }
 
 interface SearchResultProps {
@@ -210,6 +238,69 @@ export default function Demo() {
   const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [isLoadingNFTs, setIsLoadingNFTs] = useState(false);
+
+  // Transform URLs helper function
+  const processMediaUrl = (url: string | undefined | null): string => {
+    if (!url) return '';
+    
+    try {
+      // Clean the URL first
+      url = url.trim();
+
+      // Handle base64 and data URLs
+      if (url.startsWith('data:')) {
+        // Skip empty or malformed data URLs
+        if (url === 'data:' || url.includes('charset=utf-8,%0A')) {
+          return '';
+        }
+        return url;
+      }
+
+      // Handle Arweave URLs
+      if (url.startsWith('ar://')) {
+        return url.replace('ar://', 'https://arweave.net/');
+      }
+      // Also handle direct arweave.net URLs
+      if (url.includes('arweave.net/')) {
+        return url;
+      }
+
+      // Extract IPFS hash from various URL formats
+      let ipfsHash = '';
+
+      // Handle IPFS URLs
+      if (url.startsWith('ipfs://')) {
+        ipfsHash = url.replace('ipfs://', '');
+      } else if (url.includes('/ipfs/')) {
+        // Extract hash from /ipfs/ path, handling double ipfs cases
+        const parts = url.split('/ipfs/').filter(Boolean);
+        ipfsHash = parts[parts.length - 1]; // Take the last part
+      } else if (url.match(/^Qm[1-9A-Za-z]{44}/)) {
+        ipfsHash = url;
+      } else if (url.match(/^bafy[A-Za-z0-9]{44}/)) {
+        ipfsHash = url;
+      }
+
+      // If we found an IPFS hash, try multiple gateways
+      if (ipfsHash) {
+        // Clean up the hash (remove any query params or trailing slashes)
+        ipfsHash = ipfsHash.split('?')[0].split('#')[0].replace(/\/$/, '');
+        
+        // Try cloudflare gateway first as it's often more reliable
+        return `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`;
+      }
+
+      // If it's a relative URL without protocol, assume https
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return `https://${url}`;
+      }
+
+      return url;
+    } catch (e) {
+      console.error('Error processing URL:', url, e);
+      return '';
+    }
+  };
 
   const handleSearch = async (username: string) => {
     setIsSearching(true);
@@ -321,7 +412,7 @@ export default function Demo() {
 
       // Now fetch NFTs for all addresses
       const allNFTs: NFT[] = [];
-      
+
       for (const address of allAddresses) {
         try {
           // Fetch from Ethereum Mainnet
@@ -331,19 +422,28 @@ export default function Demo() {
           }
 
           const url = new URL(`https://eth-mainnet.g.alchemy.com/v2/${alchemyKey}/getNFTs`);
-          url.searchParams.append('owner', address);
-          url.searchParams.append('withMetadata', 'true');
-          url.searchParams.append('pageSize', '100');
+            url.searchParams.append('owner', address);
+            url.searchParams.append('withMetadata', 'true');
+            url.searchParams.append('pageSize', '100');
 
-          const nftResponse = await fetch(url.toString());
-          const nftData = await nftResponse.json();
+            const nftResponse = await fetch(url.toString());
+            const nftData = await nftResponse.json();
           console.log(`NFTs for address ${address}:`, nftData);
 
-          if (nftData.ownedNfts) {
+            if (nftData.ownedNfts) {
             const mappedNFTs = nftData.ownedNfts
               .map((nft: AlchemyNFT) => {
                 // Enhanced audio content detection
                 let audioUrl: string | null = null;
+                let hasValidAudio = false;
+
+                // Check if the URL points to an audio file
+                const isAudioUrl = (url: string): boolean => {
+                  const audioExtensions = /\.(mp3|wav|ogg|m4a|aac)$/i;
+                  const audioMimeTypes = /(audio|sound)/i;
+                  return audioExtensions.test(url) || audioMimeTypes.test(url);
+                };
+
                 const potentialAudioUrl = 
                   nft.metadata?.animation_url ||
                   nft.metadata?.audio ||
@@ -353,93 +453,149 @@ export default function Demo() {
                   nft.metadata?.properties?.audio_file ||
                   nft.metadata?.properties?.soundContent?.url ||
                   nft.metadata?.properties?.animation_url ||
-                  (nft.metadata?.artwork?.uri?.includes('audio') ? nft.metadata.artwork.uri : null);
+                  (isArtworkObject(nft.metadata?.artwork) && nft.metadata.artwork.uri?.includes('audio') ? nft.metadata.artwork.uri : null);
 
-                if (potentialAudioUrl) {
+                if (potentialAudioUrl && isAudioUrl(potentialAudioUrl)) {
                   audioUrl = potentialAudioUrl;
-                }
-
-                // Check if animation_url is an audio file
-                if (!audioUrl && nft.metadata?.animation_url) {
-                  const url = nft.metadata.animation_url.toLowerCase();
-                  if (url.match(/\.(mp3|wav|ogg|m4a|aac)$/) || 
-                      url.includes('audio') ||
-                      nft.metadata?.properties?.mimeType?.includes('audio') ||
-                      nft.metadata?.properties?.category === 'audio' ||
-                      nft.metadata?.properties?.sound === true) {
-                    audioUrl = nft.metadata.animation_url;
-                  }
+                  hasValidAudio = true;
                 }
 
                 // Check for audio in files array if present
-                if (!audioUrl && nft.metadata?.properties?.files) {
+                if (!hasValidAudio && nft.metadata?.properties?.files) {
                   const files = Array.isArray(nft.metadata.properties.files) 
                     ? nft.metadata.properties.files 
                     : [nft.metadata.properties.files];
                   
                   const audioFile = files.find((f: NFTFile) => 
-                    f.type?.toLowerCase()?.includes('audio') ||
+                    (f.type?.toLowerCase()?.includes('audio') ||
                     f.mimeType?.toLowerCase()?.includes('audio') ||
-                    f.uri?.toLowerCase()?.match(/\.(mp3|wav|m4a|ogg|aac)$/) ||
-                    f.name?.toLowerCase()?.match(/\.(mp3|wav|m4a|ogg|aac)$/)
+                    (f.uri && isAudioUrl(f.uri)) ||
+                    (f.name && isAudioUrl(f.name)))
                   );
                   
-                  if (audioFile) {
+                  if (audioFile && audioFile.uri && isAudioUrl(audioFile.uri)) {
                     audioUrl = audioFile.uri || audioFile.url || null;
+                    hasValidAudio = true;
                   }
                 }
 
-                // Only include NFTs with audio content
-                if (!audioUrl && 
-                    !nft.metadata?.properties?.category?.toLowerCase()?.includes('audio') &&
-                    !nft.metadata?.properties?.sound &&
-                    !nft.metadata?.properties?.soundContent) {
-                  return null;
+                // Additional checks for audio content
+                if (!hasValidAudio && (
+                  nft.metadata?.properties?.category?.toLowerCase()?.includes('audio') ||
+                  nft.metadata?.properties?.sound ||
+                  nft.metadata?.mime_type?.toLowerCase()?.includes('audio')
+                )) {
+                  hasValidAudio = true;
                 }
 
-                // Transform URLs
-                if (audioUrl) {
-                  if (audioUrl.startsWith('ipfs://')) {
-                    audioUrl = audioUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (audioUrl.startsWith('ar://')) {
-                    audioUrl = audioUrl.replace('ar://', 'https://arweave.net/');
+                // Get the visual representation
+                let imageUrl = null;
+                let animationUrl = null;
+                let isVideo = false;
+                let isAnimation = false;
+
+                // Check for animation content first
+                if (nft.metadata?.animation_url) {
+                  const url = nft.metadata.animation_url.toLowerCase();
+                  const mimeType = (nft.metadata?.properties?.mimeType || nft.metadata?.content?.mime || '').toLowerCase();
+                  
+                  console.log('NFT Animation Check:', {
+                    name: nft.title || nft.metadata?.name,
+                    animation_url: url,
+                    mimeType: mimeType,
+                    metadata: nft.metadata,
+                    media: nft.media
+                  });
+
+                  // Check for video content first
+                  if (url.match(/\.(mp4|webm|mov|m4v)$/) || 
+                      url.includes('video') ||
+                      mimeType.includes('video') ||
+                      nft.metadata?.properties?.category?.toLowerCase()?.includes('video') ||
+                      nft.metadata?.animation_details?.format?.toLowerCase() === 'mp4' ||
+                      nft.metadata?.animation_details?.codecs?.includes('H.264')) {
+                    console.log('Detected as Video:', nft.title || nft.metadata?.name);
+                    isVideo = true;
+                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                  } 
+                  // Then check for other animation formats
+                  else if (url.match(/\.(gif|webp|svg|html|glb|gltf)$/) || 
+                          url.includes('animation') ||
+                          mimeType.includes('animation') ||
+                          nft.metadata?.properties?.category?.toLowerCase()?.includes('animation')) {
+                    console.log('Detected as Animation:', nft.title || nft.metadata?.name);
+                    isAnimation = true;
+                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                  }
+                }
+
+                // Also check media array for animations
+                if (!isVideo && !isAnimation && nft.media) {
+                  console.log('Checking media array:', {
+                    name: nft.title || nft.metadata?.name,
+                    media: nft.media
+                  });
+
+                  const mediaItem = nft.media.find(m => {
+                    const format = (m.format || '').toLowerCase();
+                    const gateway = (m.gateway || '').toLowerCase();
+                    const raw = (m.raw || '').toLowerCase();
+                    
+                    const isAnimated = format.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
+                           format.includes('video') ||
+                           format.includes('animation') ||
+                           gateway.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
+                           raw.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/);
+
+                    if (isAnimated) {
+                      console.log('Found animated media:', {
+                        name: nft.title || nft.metadata?.name,
+                        format,
+                        gateway,
+                        raw
+                      });
+                    }
+                    
+                    return isAnimated;
+                  });
+                  
+                  if (mediaItem) {
+                    const format = mediaItem.format?.toLowerCase() || '';
+                    const url = mediaItem.gateway || mediaItem.raw || '';
+                    
+                    if (format.match(/\.(mp4|webm|mov|m4v)$/) || 
+                        format.includes('video') ||
+                        url.match(/\.(mp4|webm|mov|m4v)$/)) {
+                      console.log('Media item detected as Video:', nft.title || nft.metadata?.name);
+                      isVideo = true;
+                      animationUrl = processMediaUrl(url);
+                    } else {
+                      console.log('Media item detected as Animation:', nft.title || nft.metadata?.name);
+                      isAnimation = true;
+                      animationUrl = processMediaUrl(url);
+                    }
                   }
                 }
 
                 // Get image URL with enhanced artwork detection
-                let imageUrl = 
-                  nft.metadata?.artwork?.uri ||
+                const artwork = nft.metadata?.artwork as { uri?: string; url?: string } | undefined;
+                imageUrl = 
+                  artwork?.uri ||
+                  artwork?.url ||
                   nft.metadata?.image ||
                   nft.metadata?.image_url ||
                   nft.metadata?.properties?.image ||
                   nft.metadata?.properties?.visual?.url ||
-                  nft.media?.[0]?.gateway;
+                  nft.media?.[0]?.gateway ||
+                  nft.media?.[0]?.raw;
 
-                // Check for artwork in files array
-                if (!imageUrl && nft.metadata?.properties?.files) {
-                  const files = Array.isArray(nft.metadata.properties.files) 
-                    ? nft.metadata.properties.files 
-                    : [nft.metadata.properties.files];
-                  
-                  const imageFile = files.find((f: any) => 
-                    f.type?.toLowerCase()?.includes('image') ||
-                    f.mimeType?.toLowerCase()?.includes('image') ||
-                    f.uri?.toLowerCase()?.match(/\.(jpg|jpeg|png|gif|webp)$/) ||
-                    f.name?.toLowerCase()?.match(/\.(jpg|jpeg|png|gif|webp)$/)
-                  );
-                  
-                  if (imageFile) {
-                    imageUrl = imageFile.uri || imageFile.url;
-                  }
+                // Transform URLs
+                if (imageUrl) {
+                  imageUrl = processMediaUrl(imageUrl);
                 }
 
-                // Transform image URLs
-                if (imageUrl) {
-                  if (imageUrl.startsWith('ipfs://')) {
-                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (imageUrl.startsWith('ar://')) {
-                    imageUrl = imageUrl.replace('ar://', 'https://arweave.net/');
-                  }
+                if (animationUrl) {
+                  animationUrl = processMediaUrl(animationUrl);
                 }
 
                 // Fallback image if none found
@@ -462,8 +618,10 @@ export default function Demo() {
                   image: imageUrl,
                   audio: audioUrl || null,
                   audioMimeType,
-                  isVideo: false,
-                  isAnimation: false,
+                  isVideo,
+                  isAnimation,
+                  animationUrl,
+                  hasValidAudio,
                   metadata: nft.metadata,
                   collection: {
                     name: nft.contract.name || 'Unknown Collection',
@@ -474,24 +632,33 @@ export default function Demo() {
               })
               .filter(Boolean);
 
-            allNFTs.push(...mappedNFTs);
+              allNFTs.push(...mappedNFTs);
           }
 
           // Also check Base network
           const baseUrl = new URL(`https://base-mainnet.g.alchemy.com/v2/${alchemyKey}/getNFTs`);
-          baseUrl.searchParams.append('owner', address);
-          baseUrl.searchParams.append('withMetadata', 'true');
-          baseUrl.searchParams.append('pageSize', '100');
+            baseUrl.searchParams.append('owner', address);
+            baseUrl.searchParams.append('withMetadata', 'true');
+            baseUrl.searchParams.append('pageSize', '100');
 
-          const baseNftResponse = await fetch(baseUrl.toString());
-          const baseNftData = await baseNftResponse.json();
+            const baseNftResponse = await fetch(baseUrl.toString());
+            const baseNftData = await baseNftResponse.json();
           console.log(`Base NFTs for address ${address}:`, baseNftData);
 
-          if (baseNftData.ownedNfts) {
+            if (baseNftData.ownedNfts) {
             const mappedBaseNFTs = baseNftData.ownedNfts
               .map((nft: AlchemyNFT) => {
                 // Enhanced audio content detection
                 let audioUrl: string | null = null;
+                let hasValidAudio = false;
+
+                // Check if the URL points to an audio file
+                const isAudioUrl = (url: string): boolean => {
+                  const audioExtensions = /\.(mp3|wav|ogg|m4a|aac)$/i;
+                  const audioMimeTypes = /(audio|sound)/i;
+                  return audioExtensions.test(url) || audioMimeTypes.test(url);
+                };
+
                 const potentialAudioUrl = 
                   nft.metadata?.animation_url ||
                   nft.metadata?.audio ||
@@ -501,93 +668,149 @@ export default function Demo() {
                   nft.metadata?.properties?.audio_file ||
                   nft.metadata?.properties?.soundContent?.url ||
                   nft.metadata?.properties?.animation_url ||
-                  (nft.metadata?.artwork?.uri?.includes('audio') ? nft.metadata.artwork.uri : null);
+                  (isArtworkObject(nft.metadata?.artwork) && nft.metadata.artwork.uri?.includes('audio') ? nft.metadata.artwork.uri : null);
 
-                if (potentialAudioUrl) {
+                if (potentialAudioUrl && isAudioUrl(potentialAudioUrl)) {
                   audioUrl = potentialAudioUrl;
-                }
-
-                // Check if animation_url is an audio file
-                if (!audioUrl && nft.metadata?.animation_url) {
-                  const url = nft.metadata.animation_url.toLowerCase();
-                  if (url.match(/\.(mp3|wav|ogg|m4a|aac)$/) || 
-                      url.includes('audio') ||
-                      nft.metadata?.properties?.mimeType?.includes('audio') ||
-                      nft.metadata?.properties?.category === 'audio' ||
-                      nft.metadata?.properties?.sound === true) {
-                    audioUrl = nft.metadata.animation_url;
-                  }
+                  hasValidAudio = true;
                 }
 
                 // Check for audio in files array if present
-                if (!audioUrl && nft.metadata?.properties?.files) {
+                if (!hasValidAudio && nft.metadata?.properties?.files) {
                   const files = Array.isArray(nft.metadata.properties.files) 
                     ? nft.metadata.properties.files 
                     : [nft.metadata.properties.files];
                   
                   const audioFile = files.find((f: NFTFile) => 
-                    f.type?.toLowerCase()?.includes('audio') ||
+                    (f.type?.toLowerCase()?.includes('audio') ||
                     f.mimeType?.toLowerCase()?.includes('audio') ||
-                    f.uri?.toLowerCase()?.match(/\.(mp3|wav|m4a|ogg|aac)$/) ||
-                    f.name?.toLowerCase()?.match(/\.(mp3|wav|m4a|ogg|aac)$/)
+                    (f.uri && isAudioUrl(f.uri)) ||
+                    (f.name && isAudioUrl(f.name)))
                   );
                   
-                  if (audioFile) {
+                  if (audioFile && audioFile.uri && isAudioUrl(audioFile.uri)) {
                     audioUrl = audioFile.uri || audioFile.url || null;
+                    hasValidAudio = true;
                   }
                 }
 
-                // Only include NFTs with audio content
-                if (!audioUrl && 
-                    !nft.metadata?.properties?.category?.toLowerCase()?.includes('audio') &&
-                    !nft.metadata?.properties?.sound &&
-                    !nft.metadata?.properties?.soundContent) {
-                  return null;
+                // Additional checks for audio content
+                if (!hasValidAudio && (
+                  nft.metadata?.properties?.category?.toLowerCase()?.includes('audio') ||
+                  nft.metadata?.properties?.sound ||
+                  nft.metadata?.mime_type?.toLowerCase()?.includes('audio')
+                )) {
+                  hasValidAudio = true;
                 }
 
-                // Transform URLs
-                if (audioUrl) {
-                  if (audioUrl.startsWith('ipfs://')) {
-                    audioUrl = audioUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (audioUrl.startsWith('ar://')) {
-                    audioUrl = audioUrl.replace('ar://', 'https://arweave.net/');
+                // Get the visual representation
+                let imageUrl = null;
+                let animationUrl = null;
+                let isVideo = false;
+                let isAnimation = false;
+
+                // Check for animation content first
+                if (nft.metadata?.animation_url) {
+                  const url = nft.metadata.animation_url.toLowerCase();
+                  const mimeType = (nft.metadata?.properties?.mimeType || nft.metadata?.content?.mime || '').toLowerCase();
+                  
+                  console.log('NFT Animation Check:', {
+                    name: nft.title || nft.metadata?.name,
+                    animation_url: url,
+                    mimeType: mimeType,
+                    metadata: nft.metadata,
+                    media: nft.media
+                  });
+
+                  // Check for video content first
+                  if (url.match(/\.(mp4|webm|mov|m4v)$/) || 
+                      url.includes('video') ||
+                      mimeType.includes('video') ||
+                      nft.metadata?.properties?.category?.toLowerCase()?.includes('video') ||
+                      nft.metadata?.animation_details?.format?.toLowerCase() === 'mp4' ||
+                      nft.metadata?.animation_details?.codecs?.includes('H.264')) {
+                    console.log('Detected as Video:', nft.title || nft.metadata?.name);
+                    isVideo = true;
+                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                  } 
+                  // Then check for other animation formats
+                  else if (url.match(/\.(gif|webp|svg|html|glb|gltf)$/) || 
+                          url.includes('animation') ||
+                          mimeType.includes('animation') ||
+                          nft.metadata?.properties?.category?.toLowerCase()?.includes('animation')) {
+                    console.log('Detected as Animation:', nft.title || nft.metadata?.name);
+                    isAnimation = true;
+                    animationUrl = processMediaUrl(nft.metadata.animation_url);
+                  }
+                }
+
+                // Also check media array for animations
+                if (!isVideo && !isAnimation && nft.media) {
+                  console.log('Checking media array:', {
+                    name: nft.title || nft.metadata?.name,
+                    media: nft.media
+                  });
+
+                  const mediaItem = nft.media.find(m => {
+                    const format = (m.format || '').toLowerCase();
+                    const gateway = (m.gateway || '').toLowerCase();
+                    const raw = (m.raw || '').toLowerCase();
+                    
+                    const isAnimated = format.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
+                           format.includes('video') ||
+                           format.includes('animation') ||
+                           gateway.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/) ||
+                           raw.match(/(mp4|webm|mov|m4v|gif|webp|svg)$/);
+
+                    if (isAnimated) {
+                      console.log('Found animated media:', {
+                        name: nft.title || nft.metadata?.name,
+                        format,
+                        gateway,
+                        raw
+                      });
+                    }
+                    
+                    return isAnimated;
+                  });
+                  
+                  if (mediaItem) {
+                    const format = mediaItem.format?.toLowerCase() || '';
+                    const url = mediaItem.gateway || mediaItem.raw || '';
+                    
+                    if (format.match(/\.(mp4|webm|mov|m4v)$/) || 
+                        format.includes('video') ||
+                        url.match(/\.(mp4|webm|mov|m4v)$/)) {
+                      console.log('Media item detected as Video:', nft.title || nft.metadata?.name);
+                      isVideo = true;
+                      animationUrl = processMediaUrl(url);
+                    } else {
+                      console.log('Media item detected as Animation:', nft.title || nft.metadata?.name);
+                      isAnimation = true;
+                      animationUrl = processMediaUrl(url);
+                    }
                   }
                 }
 
                 // Get image URL with enhanced artwork detection
-                let imageUrl = 
-                  nft.metadata?.artwork?.uri ||
+                const artwork = nft.metadata?.artwork as { uri?: string; url?: string } | undefined;
+                imageUrl = 
+                  artwork?.uri ||
+                  artwork?.url ||
                   nft.metadata?.image ||
                   nft.metadata?.image_url ||
                   nft.metadata?.properties?.image ||
                   nft.metadata?.properties?.visual?.url ||
-                  nft.media?.[0]?.gateway;
+                  nft.media?.[0]?.gateway ||
+                  nft.media?.[0]?.raw;
 
-                // Check for artwork in files array
-                if (!imageUrl && nft.metadata?.properties?.files) {
-                  const files = Array.isArray(nft.metadata.properties.files) 
-                    ? nft.metadata.properties.files 
-                    : [nft.metadata.properties.files];
-                  
-                  const imageFile = files.find((f: any) => 
-                    f.type?.toLowerCase()?.includes('image') ||
-                    f.mimeType?.toLowerCase()?.includes('image') ||
-                    f.uri?.toLowerCase()?.match(/\.(jpg|jpeg|png|gif|webp)$/) ||
-                    f.name?.toLowerCase()?.match(/\.(jpg|jpeg|png|gif|webp)$/)
-                  );
-                  
-                  if (imageFile) {
-                    imageUrl = imageFile.uri || imageFile.url;
-                  }
+                // Transform URLs
+                if (imageUrl) {
+                  imageUrl = processMediaUrl(imageUrl);
                 }
 
-                // Transform image URLs
-                if (imageUrl) {
-                  if (imageUrl.startsWith('ipfs://')) {
-                    imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                  } else if (imageUrl.startsWith('ar://')) {
-                    imageUrl = imageUrl.replace('ar://', 'https://arweave.net/');
-                  }
+                if (animationUrl) {
+                  animationUrl = processMediaUrl(animationUrl);
                 }
 
                 // Fallback image if none found
@@ -610,8 +833,10 @@ export default function Demo() {
                   image: imageUrl,
                   audio: audioUrl || null,
                   audioMimeType,
-                  isVideo: false,
-                  isAnimation: false,
+                  isVideo,
+                  isAnimation,
+                  animationUrl,
+                  hasValidAudio,
                   metadata: nft.metadata,
                   collection: {
                     name: nft.contract.name || 'Unknown Collection',
@@ -622,8 +847,8 @@ export default function Demo() {
               })
               .filter(Boolean);
 
-            allNFTs.push(...mappedBaseNFTs);
-          }
+              allNFTs.push(...mappedBaseNFTs);
+            }
         } catch (err) {
           console.error(`Error fetching NFTs for address ${address}:`, err);
         }
@@ -635,6 +860,35 @@ export default function Demo() {
       setError(err instanceof Error ? err.message : 'Failed to fetch user details');
     } finally {
       setIsLoadingNFTs(false);
+    }
+  };
+
+  // Enhanced error handling for media elements
+  const handleMediaError = (e: any, type: string, fallbackUrl?: string) => {
+    console.error(`${type} loading error:`, e, {
+      element: e.target,
+      src: e.target.src,
+      error: e.error
+    });
+
+    const target = e.target;
+    const currentSrc = target.src;
+
+    // Try different IPFS gateways in sequence
+    if (currentSrc.includes('cloudflare-ipfs.com')) {
+      target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+    } else if (currentSrc.includes('nftstorage.link')) {
+      target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+    } else if (currentSrc.includes('dweb.link')) {
+      target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+    } else if (currentSrc.includes('ipfs.io')) {
+      if (fallbackUrl) {
+        target.src = fallbackUrl;
+      } else {
+        target.src = `https://avatar.vercel.sh/${Math.random().toString(36).substring(7)}`;
+      }
+    } else if (fallbackUrl) {
+      target.src = fallbackUrl;
     }
   };
 
@@ -798,44 +1052,221 @@ export default function Demo() {
             </div>
           ) : nfts.length > 0 ? (
             <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">Audio NFTs ({nfts.length} found)</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-4">NFTs ({nfts.length} found)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {nfts.map((nft, index) => (
                   <div key={`${nft.contract}-${nft.tokenId}-${index}`} 
                        className="bg-gray-50 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow">
-                    <div className="aspect-square relative">
-                      {nft.isVideo ? (
+                    <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      {(() => {
+                        console.log('Rendering NFT:', {
+                          name: nft.name,
+                          isVideo: nft.isVideo,
+                          isAnimation: nft.isAnimation,
+                          animationUrl: nft.animationUrl,
+                          image: nft.image
+                        });
+                        return null;
+                      })()}
+                      {nft.isVideo && nft.animationUrl ? (
                         <video
+                          key={nft.animationUrl}
+                          src={nft.animationUrl}
                           className="w-full h-full object-cover"
-                          loop
                           autoPlay
-                          playsInline
+                          loop
                           muted
-                          src={nft.animationUrl || nft.image}
+                          playsInline
+                          controls={false}
+                          onLoadStart={() => {
+                            console.log('Video load started:', {
+                              name: nft.name,
+                              url: nft.animationUrl
+                            });
+                            // Force autoplay
+                            const video = document.querySelector(`video[src="${nft.animationUrl}"]`) as HTMLVideoElement;
+                            if (video) {
+                              video.play().catch((error: Error) => console.error('Video autoplay failed:', error));
+                            }
+                          }}
+                          onLoadedData={() => {
+                            console.log('Video loaded:', {
+                              name: nft.name,
+                              url: nft.animationUrl
+                            });
+                            // Force autoplay again after load
+                            const video = document.querySelector(`video[src="${nft.animationUrl}"]`) as HTMLVideoElement;
+                            if (video) {
+                              video.play().catch((error: Error) => console.error('Video autoplay failed:', error));
+                            }
+                          }}
                           onError={(e) => {
-                            console.error('Video error:', e);
-                            const target = e.target as HTMLVideoElement;
-                            target.src = `https://avatar.vercel.sh/${nft.name}`;
+                            console.error('Video loading error:', {
+                              nft: nft.name,
+                              url: nft.animationUrl,
+                              error: e,
+                              metadata: nft.metadata,
+                              currentSrc: e.currentTarget.src
+                            });
+                            const target = e.currentTarget;
+                            const currentSrc = target.src;
+
+                            // Try different IPFS gateways in sequence
+                            if (currentSrc.includes('cloudflare-ipfs.com')) {
+                              console.log('Trying nftstorage.link gateway');
+                              target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+                            } else if (currentSrc.includes('nftstorage.link')) {
+                              console.log('Trying dweb.link gateway');
+                              target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+                            } else if (currentSrc.includes('dweb.link')) {
+                              console.log('Trying ipfs.io gateway');
+                              target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+                            } else if (nft.image) {
+                              console.log('Falling back to static image');
+                              // If all IPFS gateways fail, fallback to image
+                              target.style.display = 'none';
+                              const img = target.parentElement?.querySelector('img');
+                              if (img) {
+                                img.src = nft.image;
+                                img.style.display = 'block';
+                              }
+                            }
                           }}
                         />
-                      ) : nft.isAnimation ? (
-                        <img
-                          src={nft.animationUrl || nft.image}
-                          alt={nft.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = `https://avatar.vercel.sh/${nft.name}`;
-                          }}
-                        />
+                      ) : nft.isAnimation && nft.animationUrl ? (
+                        <div className="w-full h-full">
+                          {(() => {
+                            console.log('Rendering animation:', {
+                              name: nft.name,
+                              url: nft.animationUrl,
+                              type: nft.animationUrl.split('.').pop()?.toLowerCase()
+                            });
+                            return null;
+                          })()}
+                          {nft.animationUrl.toLowerCase().endsWith('.svg') ? (
+                            <object
+                              key={nft.animationUrl}
+                              data={nft.animationUrl}
+                              type="image/svg+xml"
+                              className="w-full h-full object-cover"
+                            >
+                              <img
+                                src={nft.image}
+                                alt={nft.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </object>
+                          ) : nft.animationUrl.toLowerCase().endsWith('.html') ? (
+                            <iframe
+                              key={nft.animationUrl}
+                              src={nft.animationUrl}
+                              className="w-full h-full border-0"
+                              sandbox="allow-scripts"
+                              loading="lazy"
+                            />
+                          ) : nft.animationUrl.toLowerCase().match(/\.(gif|webp)$/) ? (
+                            <img
+                              key={nft.animationUrl}
+                              src={nft.animationUrl}
+                              alt={nft.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                console.error('Animation loading error:', {
+                                  nft: nft.name,
+                                  url: nft.animationUrl,
+                                  error: e,
+                                  metadata: nft.metadata,
+                                  currentSrc: e.currentTarget.src
+                                });
+                                const target = e.currentTarget;
+                                const currentSrc = target.src;
+
+                                // Try different IPFS gateways in sequence
+                                if (currentSrc.includes('cloudflare-ipfs.com')) {
+                                  console.log('Trying nftstorage.link gateway');
+                                  target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+                                } else if (currentSrc.includes('nftstorage.link')) {
+                                  console.log('Trying dweb.link gateway');
+                                  target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+                                } else if (currentSrc.includes('dweb.link')) {
+                                  console.log('Trying ipfs.io gateway');
+                                  target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+                                } else if (nft.image) {
+                                  console.log('Falling back to static image');
+                                  target.src = nft.image;
+                                }
+                              }}
+                            />
+                          ) : (
+                            // For other animation types, try video first
+                            <video
+                              key={nft.animationUrl}
+                              src={nft.animationUrl}
+                              className="w-full h-full object-cover"
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              controls={false}
+                              onLoadStart={() => console.log('Animation video load started:', {
+                                name: nft.name,
+                                url: nft.animationUrl
+                              })}
+                              onLoadedData={() => console.log('Animation video loaded:', {
+                                name: nft.name,
+                                url: nft.animationUrl
+                              })}
+                              onError={(e) => {
+                                console.error('Animation video loading error:', {
+                                  nft: nft.name,
+                                  url: nft.animationUrl,
+                                  error: e,
+                                  metadata: nft.metadata,
+                                  currentSrc: e.currentTarget.src
+                                });
+                                // If video fails, fallback to image
+                                const target = e.currentTarget;
+                                target.style.display = 'none';
+                                const img = target.parentElement?.querySelector('img');
+                                if (img) {
+                                  img.src = nft.image || '';
+                                  img.style.display = 'block';
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
                       ) : (
                         <img
+                          key={nft.image}
                           src={nft.image}
                           alt={nft.name}
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = `https://avatar.vercel.sh/${nft.name}`;
+                            console.error('Image loading error:', {
+                              nft: nft.name,
+                              url: nft.image,
+                              error: e,
+                              metadata: nft.metadata,
+                              currentSrc: e.currentTarget.src
+                            });
+                            const target = e.currentTarget;
+                            const currentSrc = target.src;
+
+                            // Try different IPFS gateways in sequence
+                            if (currentSrc.includes('cloudflare-ipfs.com')) {
+                              console.log('Trying nftstorage.link gateway');
+                              target.src = currentSrc.replace('cloudflare-ipfs.com', 'nftstorage.link');
+                            } else if (currentSrc.includes('nftstorage.link')) {
+                              console.log('Trying dweb.link gateway');
+                              target.src = currentSrc.replace('nftstorage.link', 'dweb.link');
+                            } else if (currentSrc.includes('dweb.link')) {
+                              console.log('Trying ipfs.io gateway');
+                              target.src = currentSrc.replace('dweb.link', 'ipfs.io');
+                            } else {
+                              console.log('Using fallback avatar');
+                              target.src = `https://avatar.vercel.sh/${nft.name}`;
+                            }
                           }}
                         />
                       )}
@@ -845,93 +1276,36 @@ export default function Demo() {
                       {nft.collection?.name && (
                         <p className="text-sm text-gray-600 mb-2">{nft.collection.name}</p>
                       )}
-                      {nft.audio && (
+                      {nft.audio && nft.hasValidAudio && (
                         <div className="mt-2 mb-3">
                           <div className="flex items-center gap-2">
                             <button 
                               className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 w-full justify-center"
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 const audioEl = e.currentTarget.parentElement?.querySelector('audio');
-                                const button = e.currentTarget;
-                                
                                 if (audioEl) {
-                                  try {
-                                    // Stop all other playing audio elements first
+                                  if (audioEl.paused) {
+                                    // Stop all other audio elements first
                                     document.querySelectorAll('audio').forEach(audio => {
                                       if (audio !== audioEl) {
                                         audio.pause();
-                                        const otherButton = audio.parentElement?.querySelector('button');
-                                        if (otherButton) {
-                                          otherButton.innerHTML = `
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            Play Audio
-                                          `;
-                                        }
+                                        audio.currentTime = 0;
                                       }
                                     });
-
-                                    if (audioEl.paused) {
-                                      // Load the audio if not loaded
-                                      if (audioEl.readyState === 0) {
-                                        console.log('Loading audio:', nft.audio);
-                                        let audioUrl = nft.audio;
-                                        if (audioUrl?.startsWith('ar://')) {
-                                          audioUrl = `https://arweave.net/${audioUrl.replace('ar://', '')}`;
-                                        } else if (audioUrl?.startsWith('ipfs://')) {
-                                          audioUrl = audioUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
-                                        }
-                                        audioEl.src = audioUrl || '';
-                                        await audioEl.load();
+                                    audioEl.play().catch(error => {
+                                      console.error('Audio playback error:', error);
+                                      // Try alternative IPFS gateway
+                                      if (audioEl.src.includes('nftstorage.link')) {
+                                        audioEl.src = audioEl.src.replace('nftstorage.link', 'cloudflare-ipfs.com');
+                                      } else if (audioEl.src.includes('cloudflare-ipfs.com')) {
+                                        audioEl.src = audioEl.src.replace('cloudflare-ipfs.com', 'dweb.link');
+                                      } else if (audioEl.src.includes('dweb.link')) {
+                                        audioEl.src = audioEl.src.replace('dweb.link', 'ipfs.io');
                                       }
-                                      
-                                      // Try to play
-                                      console.log('Playing audio:', audioEl.src);
-                                      const playPromise = audioEl.play();
-                                      if (playPromise !== undefined) {
-                                        await playPromise;
-                                        button.innerHTML = `
-                                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                          </svg>
-                                          Pause Audio
-                                        `;
-                                      }
-                                    } else {
-                                      audioEl.pause();
-                                      button.innerHTML = `
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Play Audio
-                                      `;
-                                    }
-                                  } catch (error) {
-                                    console.error('Audio playback error:', error);
-                                    // Try alternative URL format
-                                    if (audioEl.src.includes('arweave.net')) {
-                                      const newUrl = audioEl.src.replace('https://arweave.net/', 'https://ar.io/');
-                                      console.log('Trying alternative URL:', newUrl);
-                                      audioEl.src = newUrl;
-                                      try {
-                                        await audioEl.load();
-                                        await audioEl.play();
-                                        button.innerHTML = `
-                                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                          </svg>
-                                          Pause Audio
-                                        `;
-                                      } catch (retryError) {
-                                        console.error('Retry failed:', retryError);
-                                        alert('Failed to play audio. Please try again.');
-                                      }
-                                    } else {
-                                      alert('Failed to play audio. Please try again.');
-                                    }
+                                      audioEl.play().catch(e => console.error('Final audio playback attempt failed:', e));
+                                    });
+                                  } else {
+                                    audioEl.pause();
                                   }
                                 }
                               }}
@@ -943,42 +1317,22 @@ export default function Demo() {
                               Play Audio
                             </button>
                             <audio 
+                              key={nft.audio}
                               className="hidden"
-                              preload="none"
-                              onLoadStart={(e) => {
-                                const audio = e.target as HTMLAudioElement;
-                                console.log('Audio loading started:', {
-                                  src: audio.src,
-                                  nftName: nft.name,
-                                  mimeType: nft.audioMimeType
-                                });
-                              }}
+                              preload="metadata"
+                              src={nft.audio}
                               onError={(e) => {
-                                const audio = e.target as HTMLAudioElement;
-                                console.error('Audio error:', {
-                                  src: audio.src,
-                                  error: audio.error,
-                                  nftName: nft.name,
-                                  mimeType: nft.audioMimeType
-                                });
-                                // Try alternative URL format
-                                if (audio.src.includes('arweave.net')) {
-                                  const newUrl = audio.src.replace('https://arweave.net/', 'https://ar.io/');
-                                  console.log('Trying alternative URL:', newUrl);
-                                  audio.src = newUrl;
-                                  audio.load();
-                                }
-                              }}
-                              onEnded={(e) => {
-                                const button = e.currentTarget.parentElement?.querySelector('button');
-                                if (button) {
-                                  button.innerHTML = `
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Play Audio
-                                  `;
+                                console.error('Audio loading error:', e);
+                                const target = e.currentTarget;
+                                const currentSrc = target.src;
+
+                                // Try different IPFS gateways in sequence
+                                if (currentSrc.includes('nftstorage.link')) {
+                                  target.src = currentSrc.replace('nftstorage.link', 'cloudflare-ipfs.com');
+                                } else if (currentSrc.includes('cloudflare-ipfs.com')) {
+                                  target.src = currentSrc.replace('cloudflare-ipfs.com', 'dweb.link');
+                                } else if (currentSrc.includes('dweb.link')) {
+                                  target.src = currentSrc.replace('dweb.link', 'ipfs.io');
                                 }
                               }}
                             />
@@ -987,6 +1341,11 @@ export default function Demo() {
                       )}
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-xs text-gray-500">Token ID: #{nft.tokenId}</span>
+                        {nft.network && (
+                          <span className={`text-xs px-2 py-1 rounded ${nft.network === 'ethereum' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                            {nft.network === 'ethereum' ? 'Ethereum' : 'Base'}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
