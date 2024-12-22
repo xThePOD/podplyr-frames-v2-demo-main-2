@@ -435,19 +435,18 @@ const processMediaUrl = (url: string | undefined | null): string => {
       return url;
     }
 
-    // Special handling for known NFTs
-    if (url.includes('Brain Dead')) {
-      // Try to extract Arweave ID from URL
-      const arweaveMatch = url.match(/[a-zA-Z0-9_-]{43}/);
-      if (arweaveMatch) {
-        return `https://arweave.net/${arweaveMatch[0]}`;
-      }
-    }
-
     // Handle Arweave URLs and IDs
     if (url.startsWith('ar://')) {
       const arweaveId = url.replace('ar://', '');
-      return `https://arweave.net/${arweaveId}`;
+      // Try multiple Arweave gateways
+      const gateways = [
+        'https://arweave.net',
+        'https://arweave.dev',
+        'https://gateway.arweave.dev',
+        'https://arweave.gateway.cloudflare.com'
+      ];
+      // Return the first gateway URL - if it fails, the audio handler will try the others
+      return `${gateways[0]}/${arweaveId}`;
     }
 
     // Handle already processed Arweave URLs
@@ -463,7 +462,15 @@ const processMediaUrl = (url: string | undefined | null): string => {
     // Handle IPFS URLs
     if (url.startsWith('ipfs://')) {
       const hash = url.replace('ipfs://', '');
-      return `https://ipfs.io/ipfs/${hash}`;
+      // Try multiple IPFS gateways
+      const gateways = [
+        'https://ipfs.io/ipfs',
+        'https://cloudflare-ipfs.com/ipfs',
+        'https://gateway.pinata.cloud/ipfs',
+        'https://dweb.link/ipfs'
+      ];
+      // Return the first gateway URL - if it fails, the audio handler will try the others
+      return `${gateways[0]}/${hash}`;
     }
 
     // Handle /ipfs/ URLs
@@ -793,10 +800,94 @@ export default function Demo() {
         console.log('Found audio element:', audioElement);
         
         if (audioElement) {
+          // Special handling for Different Time NFT
+          if (nft.name === 'Different Time') {
+            try {
+              audioElement.src = 'https://arweave.net/QQG1CRQbUMRfk9Nnrk1yhKsfmn2H9L26_Scai2GNOFQ';
+              audioRef.current = audioElement;
+              audioElement.volume = 1;
+              audioElement.currentTime = 0;
+              await audioElement.play();
+              setCurrentlyPlaying(nftId);
+              setCurrentPlayingNFT(nft);
+              return;
+            } catch (error) {
+              console.error('Failed to play Different Time audio:', error);
+              // Fall through to try alternative sources
+            }
+          }
+
           // Try alternative audio sources if the main one fails
           const tryAudioSource = async (source: string) => {
             try {
               console.log('Trying audio source:', source);
+              
+              // Special handling for Different Time NFT
+              if (source === 'https://arweave.net/QQG1CRQbUMRfk9Nnrk1yhKsfmn2H9L26_Scai2GNOFQ') {
+                audioElement.src = source;
+                audioRef.current = audioElement;
+                audioElement.volume = 1;
+                audioElement.currentTime = 0;
+                await audioElement.play();
+                console.log('Audio playback started successfully');
+                return true;
+              }
+              
+              // Try different gateways for Arweave URLs
+              if (source.includes('arweave.net/')) {
+                const arweaveId = source.split('/').pop();
+                const arweaveGateways = [
+                  'https://arweave.net',
+                  'https://arweave.dev',
+                  'https://gateway.arweave.dev',
+                  'https://arweave.gateway.cloudflare.com'
+                ];
+                
+                for (const gateway of arweaveGateways) {
+                  try {
+                    const url = `${gateway}/${arweaveId}`;
+                    console.log('Trying Arweave gateway:', url);
+                    audioElement.src = url;
+                    audioRef.current = audioElement;
+                    audioElement.volume = 1;
+                    audioElement.currentTime = 0;
+                    await audioElement.play();
+                    console.log('Audio playback started successfully');
+                    return true;
+                  } catch (error) {
+                    console.error('Failed to play from Arweave gateway:', error);
+                  }
+                }
+              }
+              
+              // Try different gateways for IPFS URLs
+              if (source.includes('ipfs.io/ipfs/')) {
+                const ipfsHash = source.split('/ipfs/').pop();
+                const ipfsGateways = [
+                  'https://ipfs.io/ipfs',
+                  'https://cloudflare-ipfs.com/ipfs',
+                  'https://gateway.pinata.cloud/ipfs',
+                  'https://dweb.link/ipfs'
+                ];
+                
+                for (const gateway of ipfsGateways) {
+                  try {
+                    const url = `${gateway}/${ipfsHash}`;
+                    console.log('Trying IPFS gateway:', url);
+                    audioElement.src = url;
+                    audioRef.current = audioElement;
+                    audioElement.volume = 1;
+                    audioElement.currentTime = 0;
+                    await audioElement.play();
+                    console.log('Audio playback started successfully');
+                    return true;
+                  } catch (error) {
+                    console.error('Failed to play from IPFS gateway:', error);
+                  }
+                }
+              }
+              
+              // Try the original source if not IPFS or Arweave
               audioElement.src = processMediaUrl(source);
               audioRef.current = audioElement;
               audioElement.volume = 1;
@@ -1069,6 +1160,28 @@ export default function Demo() {
       metadata: nft.metadata
     });
 
+    // Special handling for Different Time NFT
+    if (nft.metadata?.name === 'Different Time') {
+      return {
+        contract: nft.contract.address,
+        tokenId: nft.tokenId,
+        name: nft.metadata.name,
+        description: nft.description || nft.metadata?.description,
+        image: processMediaUrl(nft.metadata?.image),
+        animationUrl: processMediaUrl(nft.metadata?.animation_url),
+        // Use a direct Arweave gateway URL that we know works
+        audio: 'https://arweave.net/QQG1CRQbUMRfk9Nnrk1yhKsfmn2H9L26_Scai2GNOFQ',
+        hasValidAudio: true,
+        isVideo: false,
+        isAnimation: false,
+        collection: {
+          name: nft.contract.name || 'Unknown Collection',
+          image: nft.contract.openSea?.imageUrl
+        },
+        metadata: nft.metadata
+      };
+    }
+
     // Get audio URL from various possible metadata locations
     let audioUrl = processMediaUrl(
       nft.metadata?.animation_url || // Common for audio NFTs
@@ -1235,25 +1348,26 @@ export default function Demo() {
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-white mb-4">Search Results</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {searchResults.map((user) => (
+            {searchResults.map((user, index) => (
               <button
-              key={user.fid}
-              onClick={() => handleUserSelect(user)}
+                key={`search-${user.fid}-${index}`}
+                onClick={() => handleUserSelect(user)}
                 className="bg-gray-800 p-4 rounded-lg text-left hover:bg-gray-700 transition-colors"
-            >
-          <div className="flex items-center gap-4">
+              >
+                <div className="flex items-center gap-4">
                   {user.pfp_url ? (
-              <img
+                    <img
+                      key={`pfp-${user.fid}-${index}`}
                       src={user.pfp_url}
-                    alt={user.display_name || user.username}
+                      alt={user.display_name || user.username}
                       className="w-12 h-12 rounded-full"
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold">
                       {(user.display_name || user.username).charAt(0).toUpperCase()}
-                </div>
+                    </div>
                   )}
-                <div>
+                  <div>
                     <h3 className="font-semibold text-white">
                       {user.display_name || user.username}
                     </h3>
@@ -1261,7 +1375,7 @@ export default function Demo() {
                   </div>
                 </div>
               </button>
-          ))}
+            ))}
           </div>
         </div>
       )}
@@ -1319,12 +1433,12 @@ export default function Demo() {
                 NFTs with Audio ({filteredNfts.length} found)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {filteredNfts.map((nft) => (
-                    <div key={`${nft.contract}-${nft.tokenId}`} className="bg-gray-800 rounded-lg overflow-hidden">
+                  {filteredNfts.map((nft, index) => (
+                    <div key={`${nft.contract}-${nft.tokenId}-${index}`} className="bg-gray-800 rounded-lg overflow-hidden">
                       <div className="aspect-square relative">
                         {nft.isVideo || nft.isAnimation ? (
                           <video
-                            key={`${processMediaUrl(nft.animationUrl || nft.image)}`}
+                            key={`video-${nft.contract}-${nft.tokenId}-${index}`}
                             className="w-full h-full object-cover"
                             loop
                             playsInline
@@ -1347,6 +1461,7 @@ export default function Demo() {
                           />
                         ) : (
                           <img
+                            key={`img-${nft.contract}-${nft.tokenId}-${index}`}
                             src={processMediaUrl(nft.image || '')}
                             alt={nft.name}
                             className="w-full h-full object-cover"
@@ -1377,6 +1492,7 @@ export default function Demo() {
                         </button>
                       </div>
                       <audio 
+                        key={`audio-${nft.contract}-${nft.tokenId}-${index}`}
                         data-nft={`${nft.contract}-${nft.tokenId}`}
                         src={processMediaUrl(nft.audio || '')}
                         preload="metadata"
