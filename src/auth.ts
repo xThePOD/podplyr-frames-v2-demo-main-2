@@ -1,7 +1,6 @@
-import { AuthOptions, getServerSession } from "next-auth";
+import { AuthOptions, getServerSession } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials";
 import { createAppClient, viemConnector } from "@farcaster/auth-client";
-import { NextAuthOptions } from "next-auth";
 
 declare module "next-auth" {
   interface Session {
@@ -11,14 +10,8 @@ declare module "next-auth" {
   }
 }
 
-interface SignInCredentials {
-  message: string;
-  signature: string;
-  name: string;
-  pfp: string;
-}
-
-export const authOptions: NextAuthOptions = {
+export const authOptions: AuthOptions = {
+    // Configure one or more authentication providers
   providers: [
     CredentialsProvider({
       name: "Sign in with Farcaster",
@@ -33,6 +26,9 @@ export const authOptions: NextAuthOptions = {
           type: "text",
           placeholder: "0x0",
         },
+        // In a production app with a server, these should be fetched from
+        // your Farcaster data indexer rather than have them accepted as part
+        // of credentials.
         name: {
           label: "Name",
           type: "text",
@@ -44,21 +40,16 @@ export const authOptions: NextAuthOptions = {
           placeholder: "0x0",
         },
       },
-      async authorize(
-        credentials: SignInCredentials | undefined,
-        req: any
-      ): Promise<{ id: string } | null> {
-        if (!credentials) return null;
-
+      async authorize(credentials, req) {
         const csrfToken = req?.body?.csrfToken;
         const appClient = createAppClient({
           ethereum: viemConnector(),
         });
 
         const verifyResponse = await appClient.verifySignInMessage({
-          message: credentials.message,
-          signature: credentials.signature as `0x${string}`,
-          domain: new URL(process.env.NEXTAUTH_URL ?? "").hostname,
+          message: credentials?.message as string,
+          signature: credentials?.signature as `0x${string}`,
+          domain: new URL(process.env.NEXTAUTH_URL ?? '').hostname,
           nonce: csrfToken,
         });
         const { success, fid } = verifyResponse;
@@ -74,13 +65,13 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    session: async ({ session, token }: { session: any; token: any }) => {
+    session: async ({ session, token }) => {
       if (session?.user) {
-        session.user.fid = parseInt(token.sub ?? "");
+        session.user.fid = parseInt(token.sub ?? '');
       }
       return session;
     },
-  },
-};
+  }
+}
 
-export const getSession = () => getServerSession(authOptions);
+export const getSession = () => getServerSession(authOptions)
