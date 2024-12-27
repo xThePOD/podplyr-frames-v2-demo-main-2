@@ -774,7 +774,7 @@ export default function Demo() {
       audio.removeEventListener('loadedmetadata', updateDuration);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioRef.current, currentPlayingNFT]);
+  }, [currentPlayingNFT]);
 
   // Update the handlePlayAudio function
   const handlePlayAudio = async (nft: NFT) => {
