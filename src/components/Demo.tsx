@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import AudioVisualizer from "./AudioVisualizer";
+import Image from 'next/image';
 
 interface FarcasterUser {
   fid: number;
@@ -128,18 +128,20 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
               className="w-full px-4 py-2 flex items-center gap-3 hover:bg-gray-100 text-left"
             >
               <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-                <img
-                  src={suggestion.pfp_url}
-                  alt={suggestion.display_name}
+                <Image
+                  src={suggestion.pfp_url || `https://avatar.vercel.sh/${suggestion.username}`}
+                  alt={suggestion.display_name || suggestion.username || 'User avatar'}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.src = `https://avatar.vercel.sh/${suggestion.username}`;
                   }}
+                  width={40}
+                  height={40}
                 />
               </div>
               <div>
-                <div className="font-medium text-gray-900">{suggestion.display_name}</div>
+                <div className="font-medium text-gray-900">{suggestion.display_name || suggestion.username}</div>
                 <div className="text-sm text-gray-600">@{suggestion.username}</div>
               </div>
             </button>
@@ -291,23 +293,25 @@ function SearchResults({ user, onSelect }: SearchResultProps) {
     <div className="bg-white p-6 rounded-lg shadow-lg cursor-pointer hover:bg-gray-50" onClick={() => onSelect(user)}>
       <div className="flex items-center gap-4">
         <div className="w-16 h-16 rounded-full overflow-hidden">
-          <img
+          <Image
             src={user.pfp_url || `https://avatar.vercel.sh/${user.username}`}
             alt={user.display_name || user.username}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
               target.src = `https://avatar.vercel.sh/${user.username}`;
-                  }}
-                />
-              </div>
-              <div>
+            }}
+            width={64}
+            height={64}
+          />
+        </div>
+        <div>
           <h3 className="font-bold text-gray-900">{user.display_name || user.username}</h3>
           <p className="text-gray-600">@{user.username}</p>
           <div className="flex gap-4 mt-1 text-sm text-gray-500">
             <span>{user.follower_count.toLocaleString()} followers</span>
             <span>{user.following_count.toLocaleString()} following</span>
-              </div>
+          </div>
         </div>
       </div>
     </div>
@@ -692,15 +696,18 @@ const MediaRenderer = ({ url, alt, className, nft }: MediaRendererProps) => {
   // Handle static images
   return (
     <div ref={containerRef} className="relative w-full h-full">
-      <img
-        src={processedUrl}
-        alt={alt || ''}
-        className={className}
+      <Image
+        src={processedUrl || '/placeholder.png'}
+        alt={alt || 'Image description'}
+        width={0}
+        height={0}
+        sizes="100vw"
+        style={{ width: '100%', height: 'auto' }}
+        priority={true}
         onError={(e) => {
           console.error('Image error:', processedUrl);
           setError(true);
         }}
-        style={{ objectFit: 'cover' }}
       />
     </div>
   );
@@ -1215,10 +1222,12 @@ export default function Demo() {
                 >
                   <div className="flex items-center gap-4">
                     {user.pfp_url ? (
-                      <img
+                      <Image
                         src={user.pfp_url}
                         alt={user.display_name || user.username}
                         className="w-12 h-12 rounded-full border-2 border-gray-600"
+                        width={48}
+                        height={48}
                       />
                     ) : (
                       <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-gray-600 flex items-center justify-center text-green-400 font-mono">
@@ -1257,10 +1266,12 @@ export default function Demo() {
               </button>
               <div className="flex items-center gap-4">
                 {selectedUser.pfp_url ? (
-                  <img
+                  <Image
                     src={selectedUser.pfp_url}
-                    alt={selectedUser.display_name || selectedUser.username}
+                    alt={selectedUser.display_name || selectedUser.username || 'User avatar'}
                     className="w-16 h-16 rounded-full border-2 border-gray-600"
+                    width={64}
+                    height={64}
                   />
                 ) : (
                   <div className="w-16 h-16 rounded-full bg-gray-800 border-2 border-gray-600 flex items-center justify-center text-green-400 font-mono text-xl">

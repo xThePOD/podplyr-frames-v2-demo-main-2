@@ -1,13 +1,20 @@
 import sdk from "@farcaster/frame-sdk";
 import { SwitchChainError, fromHex, getAddress, numberToHex } from "viem";
 import { ChainNotConfiguredError, createConnector } from "wagmi";
+import type { EIP1193Provider } from 'viem';
 
 frameConnector.type = "frameConnector" as const;
+
+type Provider = {
+  on: EIP1193Provider['on'];
+  removeListener: EIP1193Provider['removeListener'];
+  request: <T = unknown>(args: { method: string; params?: any[] }) => Promise<T>;
+};
 
 export function frameConnector() {
   let connected = false;
   let initialized = false;
-  let provider: any = null;
+  let provider: Provider | null = null;
 
   const initialize = async () => {
     if (!initialized) {
@@ -18,12 +25,11 @@ export function frameConnector() {
         
         if (!fid) {
           console.log('No frame parameters found, might be first load');
-          // Don't throw here, just return and let the app handle the uninitialized state
           return;
         }
 
         // Initialize the provider
-        provider = sdk.wallet.ethProvider;
+        provider = sdk.wallet.ethProvider as Provider;
         
         if (!provider) {
           throw new Error("Failed to initialize provider");
@@ -37,7 +43,7 @@ export function frameConnector() {
     }
   };
 
-  return createConnector<typeof sdk.wallet.ethProvider>((config) => ({
+  return createConnector<Provider>((config) => ({
     id: "farcaster",
     name: "Farcaster Wallet",
     type: frameConnector.type,
@@ -50,7 +56,6 @@ export function frameConnector() {
         }
       } catch (error) {
         console.error("Setup failed:", error);
-        // Don't throw here, let the app handle the uninitialized state
       }
     },
 
@@ -62,11 +67,11 @@ export function frameConnector() {
           throw new Error("Provider not initialized");
         }
 
-        const accounts = await provider.request({
+        const accounts = await provider.request<string[]>({
           method: "eth_requestAccounts",
         });
 
-        if (!accounts || accounts.length === 0) {
+        if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
           throw new Error("No accounts returned");
         }
 
@@ -101,9 +106,14 @@ export function frameConnector() {
       }
 
       try {
-        const accounts = await provider.request({
+        const accounts = await provider.request<string[]>({
           method: "eth_requestAccounts",
         });
+        
+        if (!Array.isArray(accounts)) {
+          return [];
+        }
+        
         return accounts.map((x: string) => getAddress(x));
       } catch (error) {
         console.error("Failed to get accounts:", error);
@@ -117,7 +127,15 @@ export function frameConnector() {
       }
 
       try {
-        const hexChainId = await provider.request({ method: "eth_chainId" });
+        const result = await provider.request<string>({
+          method: "eth_chainId",
+        });
+        
+        if (typeof result !== 'string' || !result.startsWith('0x')) {
+          return config.chains[0].id;
+        }
+        
+        const hexChainId = result as `0x${string}`;
         return fromHex(hexChainId, "number");
       } catch (error) {
         console.error("Failed to get chain ID:", error);
@@ -132,7 +150,7 @@ export function frameConnector() {
 
       try {
         const accounts = await this.getAccounts();
-        return !!accounts.length;
+        return accounts.length > 0;
       } catch {
         return false;
       }
@@ -186,7 +204,7 @@ export function frameConnector() {
       if (!initialized) {
         await initialize();
       }
-      return provider || sdk.wallet.ethProvider;
+      return provider || (sdk.wallet.ethProvider as Provider);
     },
   }));
 }
