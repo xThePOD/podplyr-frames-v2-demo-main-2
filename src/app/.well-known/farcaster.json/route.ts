@@ -1,24 +1,25 @@
-export async function GET() {
-  const appUrl = process.env.NEXT_PUBLIC_URL;
-
-  const config = {
-    accountAssociation: {
-      header:
-        "eyJmaWQiOjM2MjEsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgyY2Q4NWEwOTMyNjFmNTkyNzA4MDRBNkVBNjk3Q2VBNENlQkVjYWZFIn0",
-      payload: "eyJkb21haW4iOiJmcmFtZXMtdjIudmVyY2VsLmFwcCJ9",
-      signature:
-        "MHhiNDIwMzQ1MGZkNzgzYTExZjRiOTllZTFlYjA3NmMwOTdjM2JkOTY1NGM2ODZjYjkyZTAyMzk2Y2Q0YjU2MWY1MjY5NjI5ZGQ5NTliYjU0YzEwOGI4OGVmNjdjMTVlZTdjZDc2YTRiMGU5NzkzNzA3YzkxYzFkOWFjNTg0YmQzNjFi",
-    },
-    frame: {
-      version: "0.0.0",
-      name: "Frames v2 Demo",
-      iconUrl: `${appUrl}/icon.png`,
-      splashImageUrl: `${appUrl}/splash.png`,
-      splashBackgroundColor: "#f7f7f7",
-      homeUrl: appUrl,
-      webhookUrl: `${appUrl}/api/webhook`,
-    },
-  };
-
-  return Response.json(config);
-}
+export async function GET() {  
+    const config = {
+      accountAssociation: {
+        header:
+          "eyJmaWQiOjE0ODcxLCJ0eXBlIjoiY3VzdG9keSIsImtleSI6IjB4ODlkQWMwNTM2MEE1QzY5M2Y5OUI2N2Y4Yjc5ZTg4OTkzZDhENzQ0RiJ9",
+        payload: "eyJkb21haW4iOiJwb2RwbGF5ci52ZXJjZWwuYXBwIn0",
+        signature:
+          "MHg3NjliNTc2OTZmNmQwOWIxODY5NWEwNjE5NDdjZmY2NTdiMDJkZGNkYTZhNjQ1ZDZiMDdlMjk1ZDc3YjBhYWRmMDU3NWJlMjUzNWE0ZTcyZmVjMjdmMDM3OTliNzJiODBjMGY5Y2MxMGFkMWZlMzU2YzBjNzc4MjZhNjE1OWYyZjFj",
+      },
+      frame: {
+        version: "1",
+        name: "POD Playr",
+        iconUrl: "https://podplayr.vercel.app/icon.png",
+        homeUrl: "https://podplayr.vercel.app/",
+        imageUrl: "https://podplayr.vercel.app/image.png",
+        buttonTitle: "Check this out",
+        splashImageUrl: "https://podplayr.vercel.app/splash.png",
+        splashBackgroundColor: "#eeccff",
+        webhookUrl: "https://podplayr.vercel.app/api/webhook"
+      },
+    };
+  
+    return Response.json(config);
+  }
+  
