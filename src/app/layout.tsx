@@ -15,14 +15,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <meta property="fc:frame" content="vNext" />
-        <meta property="fc:frame:image" content={`${process.env.NEXT_PUBLIC_URL}/og-image.png`} />
-        <meta property="fc:frame:button:1" content="Connect" />
-        <meta property="fc:frame:button:2" content="View NFTs" />
-        <meta property="og:title" content="Audio NFT Player" />
-        <meta property="og:description" content="Listen to your audio NFTs" />
-      </head>
       <body>
         <Providers>{children}</Providers>
       </body>
