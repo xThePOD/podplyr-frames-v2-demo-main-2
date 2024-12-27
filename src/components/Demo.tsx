@@ -705,7 +705,7 @@ const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
         sizes="100vw"
         style={{ width: '100%', height: 'auto' }}
         priority={true}
-        onError={(e) => {
+        onError={() => {
           console.error('Image error:', processedUrl);
           setError(true);
         }}
