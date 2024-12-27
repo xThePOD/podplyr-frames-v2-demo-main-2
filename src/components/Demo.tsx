@@ -644,6 +644,12 @@ const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
     setError(false);
   }, [url]);
 
+  // Update error handler to ignore event parameter
+  const handleError = () => {
+    console.error('Error loading media:', processedUrl);
+    setError(true);
+  };
+
   // Fallback image for errors
   const renderFallback = () => (
     <div className={`${className} bg-gray-800 flex items-center justify-center`}>
