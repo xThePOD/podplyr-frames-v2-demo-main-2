@@ -5,7 +5,7 @@ const appUrl = process.env.NEXT_PUBLIC_URL;
 
 const frame = {
   version: "next",
-  imageUrl: '${appUrl}/image.png',
+  imageUrl: '${appUrl}/image.jpg',
   button: {
     title: "POD Playr",
     action: {
