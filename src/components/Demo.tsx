@@ -713,7 +713,7 @@ const MediaRenderer = ({ url, alt, className, nft }: MediaRendererProps) => {
   );
 };
 
-export default function Demo() {
+export default function Demo({ title }: { title?: string }) {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<FarcasterUser[]>([]);
@@ -1193,7 +1193,7 @@ export default function Demo() {
       <RetroStyles />
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold mb-12 text-center text-green-400 font-mono tracking-wider retro-display p-4">
-          PODPLAYR
+          {title || "PODPLAYR"}
         </h1>
 
         <div className="retro-container p-6 mb-8">
