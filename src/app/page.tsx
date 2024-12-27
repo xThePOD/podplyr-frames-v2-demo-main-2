@@ -5,14 +5,14 @@ const appUrl = process.env.NEXT_PUBLIC_URL;
 
 const frame = {
   version: "next",
-  imageUrl: '${appUrl}/image.jpg',
+  imageUrl: `${appUrl}/image.jpg`,
   button: {
     title: "POD Playr",
     action: {
       type: "launch_frame",
       name: "POD Playr",
       url: appUrl,
-      splashImageUrl:'${appUrl}/splash.png',
+      splashImageUrl:`${appUrl}/splash.png`,
       splashBackgroundColor: "#000000",
     },
   },
@@ -28,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description: "Yur Web3 Media Player from @themrsazon and the POD team.",
       images: [
         {
-          url: '${appUrl}/image.jpg',
+          url: `${appUrl}/image.jpg`,
           width: 1200,
           height: 630,
           alt: "Press Play",
