@@ -18,7 +18,7 @@ interface FarcasterUser {
   verifiedAddresses?: string[];
 }
 
-interface UserDetails {
+interface _UserDetails {
   fid: number;
   username: string;
   display_name?: string;
@@ -36,7 +36,7 @@ interface SearchBarProps {
 function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   const [username, setUsername] = useState('');
   const [suggestions, setSuggestions] = useState<FarcasterUser[]>([]);
-  const [isLoadingSuggestions] = useState(false);
+  const [_isLoadingSuggestions] = useState(false);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -265,7 +265,7 @@ export interface NFT {
   metadata?: any;
 }
 
-interface AlchemyNFT {
+interface _AlchemyNFT {
   contract: {
     address: string;
     name?: string;
@@ -630,7 +630,7 @@ interface MediaRendererProps {
   url: string;
   alt: string;
   className: string;
-  nft?: NFT;
+  _nft?: NFT;
 }
 
 const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
@@ -1308,7 +1308,7 @@ export default function Demo({ title }: { title?: string }) {
                       url={nft.animationUrl || nft.image || ''}
                       alt={nft.name}
                       className="w-full h-full object-cover"
-                      nft={nft}
+                      _nft={nft}
                     />
                     {/* Play button overlay */}
                     <button 
