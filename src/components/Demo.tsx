@@ -645,7 +645,7 @@ const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
   }, [url]);
 
   // Update error handler to ignore event parameter
-  const handleError = () => {
+  const _handleError = () => {
     console.error('Error loading media:', processedUrl);
     setError(true);
   };
@@ -684,8 +684,8 @@ const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
           controls={false}
           preload="metadata"
           crossOrigin="anonymous"
-          onError={(e) => {
-            console.error('Video error:', e);
+          onError={() => {
+            console.error('Video error');
             setError(true);
           }}
           style={{ objectFit: 'cover' }}

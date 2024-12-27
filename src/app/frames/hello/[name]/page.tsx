@@ -1,13 +1,12 @@
 import App from "../../../app";
 
-type Props = {
+type PageProps = {
   params: {
     name: string;
   };
   searchParams: Record<string, string | string[] | undefined>;
 };
 
-export default async function Page(props: Props) {
-  const { name } = props.params;
-  return <App title={`Hello, ${name}`} />;
+export default function Page(props: PageProps) {
+  return <App title={`Hello, ${props.params.name}`} />;
 }
