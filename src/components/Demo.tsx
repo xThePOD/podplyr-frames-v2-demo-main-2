@@ -33,6 +33,14 @@ interface SearchBarProps {
   isSearching: boolean;
 }
 
+// Rename unused type with underscore prefix
+type _SearchResults = {
+  users: FarcasterUser[];
+  next?: {
+    cursor?: string;
+  };
+};
+
 function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   const [username, setUsername] = useState('');
   const [suggestions, setSuggestions] = useState<FarcasterUser[]>([]);

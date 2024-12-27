@@ -1,13 +1,15 @@
 import App from "../../../app";
 
-interface PageParams {
-  name: string;
-}
+export default function Page({
+  params,
+}: {
+  params: { name: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+  // Simple validation
+  if (!params?.name) {
+    return null;
+  }
 
-interface Props {
-  params: PageParams;
-}
-
-export default async function Page({ params }: Props) {
   return <App title={`Hello, ${params.name}`} />;
 }
