@@ -1,12 +1,9 @@
 import App from "../../../app";
 
-type PageProps = {
-  params: {
-    name: string;
-  };
-  searchParams: { [key: string]: string | string[] | undefined };
-};
-
-export default async function Page({ params }: PageProps) {
+export default function Page({
+  params,
+}: {
+  params: { name: string };
+}) {
   return <App title={`Hello, ${params.name}`} />;
 }

@@ -149,7 +149,7 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   );
 }
 
-function isNFTArtwork(artwork: string | NFTArtwork): artwork is NFTArtwork {
+function _isNFTArtwork(artwork: string | NFTArtwork): artwork is NFTArtwork {
   return typeof artwork === 'object' && artwork !== null && ('uri' in artwork || 'url' in artwork);
 }
 
@@ -159,7 +159,7 @@ interface NFTArtwork {
   mimeType?: string;
 }
 
-type NFTArtworkType = string | NFTArtwork;
+type _NFTArtworkType = string | NFTArtwork;
 
 interface ArtworkObject {
   uri?: string;
@@ -176,7 +176,7 @@ function isArtworkObject(artwork: unknown): artwork is ArtworkObject {
   );
 }
 
-function getArtworkUrl(artwork: unknown): string | null {
+function _getArtworkUrl(artwork: unknown): string | null {
   if (typeof artwork === 'string') {
     return artwork;
   }
@@ -725,7 +725,7 @@ export default function Demo({ title }: { title?: string }) {
   // Only show NFTs with audio
   const filteredNfts = nfts.filter(nft => nft.hasValidAudio);
 
-  const handleStopPlaying = () => {
+  const _handleStopPlaying = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
