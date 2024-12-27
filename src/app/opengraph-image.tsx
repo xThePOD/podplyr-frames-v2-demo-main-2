@@ -6,7 +6,7 @@ export const size = {
   height: 400,
 };
 
-export const contentType = "image/png";
+export const contentType = "image/jpg";
 
 export default async function Image() {
   return new ImageResponse(
