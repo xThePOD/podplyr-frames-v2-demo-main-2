@@ -36,7 +36,7 @@ interface SearchBarProps {
 function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   const [username, setUsername] = useState('');
   const [suggestions, setSuggestions] = useState<FarcasterUser[]>([]);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [isLoadingSuggestions] = useState(false);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -45,7 +45,6 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
         return;
       }
 
-      setIsLoadingSuggestions(true);
       try {
         const neynarKey = process.env.NEXT_PUBLIC_NEYNAR_API_KEY;
         if (!neynarKey) return;
@@ -62,7 +61,7 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
 
         const data = await response.json();
         if (data.result?.users) {
-          const mappedSuggestions = data.result.users.map((user: any) => ({
+          const mappedSuggestions = data.result.users.map((user: FarcasterUser) => ({
             fid: user.fid,
             username: user.username,
             display_name: user.display_name || user.username,
@@ -74,8 +73,6 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
         }
       } catch (err) {
         console.error('Error fetching suggestions:', err);
-      } finally {
-        setIsLoadingSuggestions(false);
       }
     };
 
@@ -631,14 +628,13 @@ const processMediaUrl = (url: string | undefined | null): string => {
 // Update the MediaRenderer component props interface and implementation
 interface MediaRendererProps {
   url: string;
-  alt?: string;
-  className?: string;
+  alt: string;
+  className: string;
   nft?: NFT;
 }
 
-const MediaRenderer = ({ url, alt, className, nft }: MediaRendererProps) => {
+const MediaRenderer = ({ url, alt, className }: MediaRendererProps) => {
   const [error, setError] = useState(false);
-  const [fallbackError, setFallbackError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { isVideo, isAnimation } = isMediaUrl(url);
   const processedUrl = processMediaUrl(url);
@@ -646,7 +642,6 @@ const MediaRenderer = ({ url, alt, className, nft }: MediaRendererProps) => {
 
   useEffect(() => {
     setError(false);
-    setFallbackError(false);
   }, [url]);
 
   // Fallback image for errors
@@ -718,7 +713,6 @@ export default function Demo({ title }: { title?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<FarcasterUser[]>([]);
   const [selectedUser, setSelectedUser] = useState<FarcasterUser | null>(null);
-  const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [nfts, setNfts] = useState<NFT[]>([]);
   const [isLoadingNFTs, setIsLoadingNFTs] = useState(false);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
@@ -842,7 +836,6 @@ export default function Demo({ title }: { title?: string }) {
     setError(null);
     setSearchResults([]);
     setSelectedUser(null);
-    setUserDetails(null);
     setNfts([]);
 
     try {
@@ -1254,7 +1247,6 @@ export default function Demo({ title }: { title?: string }) {
               <button
                 onClick={() => {
                   setSelectedUser(null);
-                  setUserDetails(null);
                   setNfts([]);
                   setSearchResults([]);
                 }}
