@@ -12,7 +12,7 @@ export async function GET() {
         name: "POD Playr",
         iconUrl: "https://podplayr.vercel.app/icon.png",
         homeUrl: "https://podplayr.vercel.app/",
-        imageUrl: "https://podplayr.vercel.app/image.png",
+        imageUrl: "https://podplayr.vercel.app/image.jpg",
         buttonTitle: "Check this out",
         splashImageUrl: "https://podplayr.vercel.app/splash.png",
         splashBackgroundColor: "#eeccff",

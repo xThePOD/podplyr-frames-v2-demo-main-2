@@ -4,35 +4,39 @@ import App from "./app";
 const appUrl = process.env.NEXT_PUBLIC_URL;
 
 const frame = {
-  version: "vNext",
-  imageUrl: `${appUrl}/opengraph-image`,
-  buttons: [
-    {
-      label: "Connect",
-      action: "post"
+  version: "next",
+  imageUrl: '${appUrl}/image.png',
+  button: {
+    title: "POD Playr",
+    action: {
+      type: "launch_frame",
+      name: "POD Playr",
+      url: appUrl,
+      splashImageUrl:'${appUrl}/splash.png',
+      splashBackgroundColor: "#000000",
     },
-    {
-      label: "View NFTs",
-      action: "post"
-    }
-  ],
-  postUrl: appUrl
+  },
 };
 
 export const revalidate = 300;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: "Audio NFT Player",
+    title: "POD Playr",
     openGraph: {
-      title: "Audio NFT Player",
-      description: "Listen to your audio NFTs in Farcaster",
+      title: "POD Playr",
+      description: "Yur Web3 Media Player from @themrsazon and the POD team.",
+      images: [
+        {
+          url: '${appUrl}/image.jpg',
+          width: 1200,
+          height: 630,
+          alt: "Press Play",
+        },
+      ],
     },
     other: {
       "fc:frame": JSON.stringify(frame),
-      "fc:frame:image": `${appUrl}/opengraph-image`,
-      "fc:frame:button:1": "Connect",
-      "fc:frame:button:2": "View NFTs",
     },
   };
 }
