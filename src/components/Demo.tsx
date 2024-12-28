@@ -103,7 +103,6 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
     setSuggestions([]); // Clear suggestions after selection
   };
   
-  // Ready SDK
 
   return (
     <div className="relative w-full max-w-md mx-auto">
