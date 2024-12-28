@@ -2,31 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
-import { signIn, signOut, getCsrfToken } from "next-auth/react";
-import sdk, {
-  FrameNotificationDetails,
-  type FrameContext,
-} from "@farcaster/frame-sdk";
-import {
-  useAccount,
-  useSendTransaction,
-  useSignMessage,
-  useSignTypedData,
-  useWaitForTransactionReceipt,
-  useDisconnect,
-  useConnect,
-  useSwitchChain,
-  useChainId,
-} from "wagmi";
 
-import { config } from "~/components/providers/WagmiProvider";
-import { Button } from "~/components/ui/Button";
-import { truncateAddress } from "~/lib/truncateAddress";
-import { base, optimism } from "wagmi/chains";
-import { BaseError, UserRejectedRequestError } from "viem";
-import { useSession } from "next-auth/react"
-import { SignIn as SignInCore } from "@farcaster/frame-core";
-import { SignInResult } from "@farcaster/frame-core/dist/actions/signIn";
 
 interface FarcasterUser {
   fid: number;
@@ -128,56 +104,6 @@ function SearchBar({ onSearch, isSearching }: SearchBarProps) {
   };
   
   // Ready SDK
-  useEffect(() => {
-    const load = async () => {
-      const context = await sdk.context;
-      setContext(context);
-      setAdded(context.client.added);
-
-      sdk.on("frameAdded", ({ notificationDetails }) => {
-        setLastEvent(
-          `frameAdded${!!notificationDetails ? ", notifications enabled" : ""}`
-        );
-
-        setAdded(true);
-        if (notificationDetails) {
-          setNotificationDetails(notificationDetails);
-        }
-      });
-
-      sdk.on("frameAddRejected", ({ reason }) => {
-        setLastEvent(`frameAddRejected, reason ${reason}`);
-      });
-
-      sdk.on("frameRemoved", () => {
-        setLastEvent("frameRemoved");
-        setAdded(false);
-        setNotificationDetails(null);
-      });
-
-      sdk.on("notificationsEnabled", ({ notificationDetails }) => {
-        setLastEvent("notificationsEnabled");
-        setNotificationDetails(notificationDetails);
-      });
-      sdk.on("notificationsDisabled", () => {
-        setLastEvent("notificationsDisabled");
-        setNotificationDetails(null);
-      });
-
-      sdk.on("primaryButtonClicked", () => {
-        console.log("primaryButtonClicked");
-      });
-
-      sdk.actions.ready({});
-    };
-    if (sdk && !isSDKLoaded) {
-      setIsSDKLoaded(true);
-      load();
-      return () => {
-        sdk.removeAllListeners();
-      };
-    }
-  }, [isSDKLoaded]);
 
   return (
     <div className="relative w-full max-w-md mx-auto">
