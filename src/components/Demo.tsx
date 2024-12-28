@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
+import sdk from "@farcaster/frame-sdk";
 
 
 interface FarcasterUser {
@@ -758,6 +759,16 @@ export default function Demo({ title }: { title?: string }) {
       setAudioProgress(time);
     }
   };
+
+  useEffect(() => {
+    const load = async () => {
+      sdk.actions.ready();
+    };
+    if (sdk && !isSDKLoaded) {
+      setIsSDKLoaded(true);
+      load();
+    }
+  }, [isSDKLoaded]);
 
   useEffect(() => {
     const audio = audioRef.current;
