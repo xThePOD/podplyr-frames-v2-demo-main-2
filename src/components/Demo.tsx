@@ -812,6 +812,8 @@ export default function Demo({ title }: { title?: string }) {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isSDKLoaded, setIsSDKLoaded] = useState(false);
+
 
   // Only show NFTs with audio
   const filteredNfts = nfts.filter(nft => nft.hasValidAudio);
